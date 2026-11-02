@@ -361,6 +361,7 @@ def _em_cache(chave, ttl, fn):
 
 @app.route('/api/status', methods=['GET'])
 def api_status():
+    """O estado do bridge (a BMPCC principal, os gateways, o relogio, o LTC, os alvos de REC, a falha pendente, a saude do Atom) para a consola e a pagina; as chaves que comecam por _ sao internas e nao saem."""
     if not request.headers.get("X-Bridge-Service"):         # os servicos (USB) nao contam como alguem a ver
         state["_last_ui_poll"] = time.time()
     # Filter out internal keys starting with _
@@ -490,6 +491,7 @@ def api_fault_test():
 
 @app.route('/api/fault/clear', methods=['POST'])
 def api_fault_clear():
+    """Dispensa a falha pendente (a faixa de falha da consola e da pagina). Uma camara que caiu a gravar e nao voltou deixa de contar como a gravar."""
     clear_fault()
     # O operador viu a falha: uma camara que caiu a gravar e nao voltou deixa de contar como a gravar.
     state["_bm_rec_incerto"] = None
@@ -500,6 +502,7 @@ def api_fault_clear():
 
 @app.route('/api/system/led', methods=['POST'])
 def api_led():
+    """{\"on\": true | false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED."""
     on = bool(_body().get("on", True))
     if not apply_led(on):
         return jsonify({"error": "Dongle LED not found"}), 404
@@ -983,6 +986,7 @@ def api_tailscale():
 
 @app.route('/api/net/action', methods=['POST'])
 def api_net_action():
+    """{\"action\": \"ap_cameras\" | \"restart_nm\" | \"restart_bridge\"}: reinicia o AP das cameras, o NetworkManager ou o bridge. Recusado a gravar."""
     action = _body().get("action")
     if action == "restart_bridge":
         if anything_recording():
@@ -1165,6 +1169,7 @@ def api_system_terms_post():
 
 @app.route('/api/system/update', methods=['GET'])
 def api_system_update_check():
+    """Compara o Atom com o repositorio publico: o commit do clone e o instalado, o que ha de novo, se ha alteracoes locais e se uma atualizacao corre. ?log=1 devolve o registo da atualizacao em curso."""
     if request.args.get("log"):
         try:
             with open(UPDATE_LOG, encoding="utf-8", errors="replace", newline="") as f:   # newline="": o \r nao vira \n
@@ -1206,6 +1211,7 @@ def api_system_update_check():
 
 @app.route('/api/system/update', methods=['POST'])
 def api_system_update():
+    """Atualiza o Atom a partir do repositorio publico (puxa o codigo e corre o instalador). Recusado a gravar. {\"then_gateways\": [...]} grava a seguir o firmware dos gateways."""
     import shlex
     if anything_recording():
         return jsonify({"error": "Recording \u2014 not updating now"}), 409

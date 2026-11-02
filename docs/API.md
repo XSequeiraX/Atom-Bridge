@@ -74,7 +74,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/fault/clear` |  |
+| POST | `/api/fault/clear` | Dispensa a falha pendente (a faixa de falha da consola e da pagina). Uma camara que caiu a gravar e nao voltou deixa de contar como a gravar. |
 | POST | `/api/fault/test` | Raise a fake fault so the alarm can be verified before a shoot. |
 
 ## gateways
@@ -82,9 +82,9 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | Metodo | Caminho | O que faz |
 |---|---|---|
 | GET | `/api/gateways/c3` | O gateway C3 da BMPCC principal e os C3 anunciados que nao pertencem a nenhuma BMPCC (found). |
-| POST | `/api/gateways/c3/enabled` |  |
+| POST | `/api/gateways/c3/enabled` | {"on": true / false}: liga ou desliga o gateway C3 da BMPCC principal. Desligado, o bridge deixa de o procurar. Recusado a gravar. |
 | GET,POST | `/api/gateways/c3/firmware` | Firmware do gateway C3 por Wi-Fi: GET compara o do C3 com o do repositorio; POST envia o que mudou (?action=rollback volta ao anterior). Recusado a gravar: o C3 reinicia. |
-| POST | `/api/gateways/c3/host` |  |
+| POST | `/api/gateways/c3/host` | {"host": endereco}: o endereco do C3 da BMPCC principal (vazio apaga). 409 a gravar, ou se o endereco e de um C3 extra ou de um S3. |
 | GET,POST | `/api/gateways/firmware` | GET: o estado do firmware de todos os gateways. POST {"ids": [...]} (omitido = todos os atrasados): actualiza-os. POST {"auto": true/false} liga/desliga a actualizacao automatica. |
 | GET | `/api/gateways/s3` | Os gateways S3 das GoPro (o primeiro em gateway, todos em gateways) e as GoPro que se anunciam (found). |
 | POST | `/api/gateways/s3/add` | Mais um gateway S3: {host, name}. O primeiro nunca se acrescenta (ja existe). |
@@ -93,7 +93,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | POST | `/api/gateways/s3/host` | Endereco do gateway ESP32-S3 das GoPro. |
 | POST | `/api/gateways/s3/led` | O tipo de LED da placa S3: {"type": "rgb"/"simple"/"off", "gw": n}. Aplica-se logo. |
 | POST | `/api/gateways/s3/mode` | O selector do S3: {"mode": "gopro"/"f6"/"f6solo", "gw": n, "psk": "..."}. O S3 guarda e reinicia. `psk`: a palavra-passe do Wi-Fi do comando autonomo (f6solo); nao se regista. |
-| POST | `/api/gateways/s3/remove` |  |
+| POST | `/api/gateways/s3/remove` | {"gw": n}: tira um gateway S3 (qualquer, tambem o primeiro) do bridge e as GoPro dele saem das listas; o gateway e os emparelhamentos ficam como estao. Recusado a gravar. |
 | POST | `/api/gateways/s3/reset` | Repoe o gateway ESP32-S3: reboot / bonds / factory. |
 | POST | `/api/gateways/s3/scan` | Procura GoPro a anunciar-se (o gateway varre; demora uns segundos). |
 | GET,POST | `/api/gateways/usb` | Configuracao inicial e actualizacao de qualquer gateway (C3 ou S3) ligado por USB ao Atom: GET diz as portas, as ferramentas e as imagens; POST {"port", "use_ap": bool, "wifi": {"ssid", "psk"}} identifica a placa, grava-lhe o firmware e o Wi-Fi (o das cameras com use_ap). As passwords nunca vao para o registo nem para a resposta. "kind": "m5stick" grava o comando de bolso do F6 (M5StickS3): "mode" setup (imagem completa + o Wi-Fi do S3 do F6 em "wifi"), update (so a aplicacao) ou wifi (so o nome e a palavra-passe do AP). |
@@ -116,19 +116,19 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/login` |  |
+| POST | `/api/login` | {"pin": "1234"}: abre uma sessao com o PIN da pagina (cookie HttpOnly). 401 se o PIN esta errado, 429 depois de muitas tentativas. Do Atom e da Tailscale entra-se sem PIN. |
 
 ## logout
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/logout` |  |
+| POST | `/api/logout` | Fecha a sessao da pagina (apaga o cookie). |
 
 ## net
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/net/action` |  |
+| POST | `/api/net/action` | {"action": "ap_cameras" / "restart_nm" / "restart_bridge"}: reinicia o AP das cameras, o NetworkManager ou o bridge. Recusado a gravar. |
 | GET | `/api/net/status` | Wi-Fi picture for the recovery panel. |
 | GET | `/api/net/tailscale` | Estado do Tailscale, que e o caminho de acesso remoto ao Atom. |
 | POST | `/api/net/wifi/connect` | Liga o uplink a uma rede GUARDADA, escolhida pelo operador. |
@@ -151,8 +151,8 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | Metodo | Caminho | O que faz |
 |---|---|---|
 | POST | `/api/rec` | Grava/para so as camaras seleccionadas que estiverem em modo video (as Canon so gravam em modo video). |
-| POST | `/api/rec/strict` |  |
-| POST | `/api/rec/targets` |  |
+| POST | `/api/rec/strict` | {"on": true / false}: o modo estrito do REC. Ligado, uma BMPCC que pare sem o bridge lho pedir levanta alarme. |
+| POST | `/api/rec/targets` | Os devices que gravam com o REC de grupo. {"id": x, "on": true / false} ou {"toggle": x} muda um so; {"targets": [ids]} troca a lista inteira. Devolve a lista. |
 
 ## security
 
@@ -180,27 +180,27 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| GET | `/api/status` |  |
+| GET | `/api/status` | O estado do bridge (a BMPCC principal, os gateways, o relogio, o LTC, os alvos de REC, a falha pendente, a saude do Atom) para a consola e a pagina; as chaves que comecam por _ sao internas e nao saem. |
 
 ## system
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/system/led` |  |
+| POST | `/api/system/led` | {"on": true / false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED. |
 | POST | `/api/system/reboot` | Reinicia o Atom (recusado a gravar). |
 | POST | `/api/system/shutdown` | Desliga o Atom (recusado a gravar). |
 | GET | `/api/system/sony_sdk` | O ajudante da Sony (Camera Remote SDK): {available, why, sdk, models, caps, found}. ?scan=1 procura camaras (USB e rede local; a lista chega em found uns segundos depois). |
 | GET | `/api/system/terms` | Os avisos de licenca (Sony, Canon, Blackmagic...) e se o operador ja os aceitou: {accepted, version, at, text}. A consola mostra-os antes de arrancar e a pagina na primeira visita: uma vez, nao a cada camara. |
 | POST | `/api/system/terms` | Aceita os avisos de licenca: {"accept": true}. Fica guardado (termos.json) ate o texto mudar. |
-| GET | `/api/system/update` |  |
-| POST | `/api/system/update` |  |
+| GET | `/api/system/update` | Compara o Atom com o repositorio publico: o commit do clone e o instalado, o que ha de novo, se ha alteracoes locais e se uma atualizacao corre. ?log=1 devolve o registo da atualizacao em curso. |
+| POST | `/api/system/update` | Atualiza o Atom a partir do repositorio publico (puxa o codigo e corre o instalador). Recusado a gravar. {"then_gateways": [...]} grava a seguir o firmware dos gateways. |
 
 ## time
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
 | POST | `/api/time/cameras/sync` | Set every connected camera's clock, on the operator's say-so. |
-| POST | `/api/time/ltc/clear` |  |
+| POST | `/api/time/ltc/clear` | Esquece o LTC guardado como fonte de relogio. Nao mexe no relogio do Atom. |
 | POST | `/api/time/ltc/jam` | Agarra o timecode do gerador. Bloqueia alguns segundos a gravar audio. |
 | POST | `/api/time/ltc/send` | LTC a andar pela saida de auscultadores para um aparelho que faz jam pela entrada de audio (DJI Mic 3, como o F6). {"to": "DJI Mic 3", "secs": 15} |
 | POST | `/api/time/ltc/set_system_clock` | Acerta o relogio do Atom pelo gerador de timecode. |
@@ -216,16 +216,16 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| GET | `/` |  |
-| GET | `/eventlog` |  |
-| GET | `/f6card` |  |
-| GET | `/favicon.ico` |  |
+| GET | `/` | A pagina principal: REC, cameras, gateways, relogio, rede e sistema. |
+| GET | `/eventlog` | O registo de eventos do bridge. |
+| GET | `/f6card` | A pagina do cartao SD do F6: ler o cartao, cruzar com o shoot log, ouvir, renomear e arrumar as takes. |
+| GET | `/favicon.ico` | O icone da app (192 e 512 px) e o favicon que os browsers pedem sozinhos. |
 | GET | `/fonts/<path:nome>` | Serve os tipos de letra a partir do proprio Atom. |
 | GET | `/gopro_qr` | Codigo QR animado com a hora do bridge (GoPro Labs: 'oT...'): a camara le-o e acerta o relogio. |
-| GET | `/icon-192.png` |  |
-| GET | `/icon-512.png` |  |
-| GET | `/login` |  |
-| GET | `/manifest.json` |  |
-| GET | `/shootlog` |  |
-| GET | `/sw.js` |  |
-| GET | `/view` |  |
+| GET | `/icon-192.png` | O icone da app (192 e 512 px) e o favicon que os browsers pedem sozinhos. |
+| GET | `/icon-512.png` | O icone da app (192 e 512 px) e o favicon que os browsers pedem sozinhos. |
+| GET | `/login` | A pagina do PIN. |
+| GET | `/manifest.json` | O manifesto da app web (adicionar ao ecra principal do telemovel). |
+| GET | `/shootlog` | O shoot log (takes, timecodes e clips) para ler e descarregar. |
+| GET | `/sw.js` | O service worker da pagina (nunca guarda em cache o que vem de /api/). |
+| GET | `/view` | A pagina so de leitura: o estado do rig sem botoes de comando, em letra grande para ver ao longe. |

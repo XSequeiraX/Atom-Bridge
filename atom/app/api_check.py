@@ -421,6 +421,10 @@ def main():
         print("escrito", DOCS)
         return 0
     erros = erros_de_nomes(rs) + erros_de_clientes(rs)
+    # Toda a rota tem descricao: e o que o docs/API.md mostra. Uma docstring vazia deixava a linha em branco.
+    for r in rs:
+        if not r["doc"].strip():
+            erros.append("%s %s (%s:%d): sem docstring: o docs/API.md ficaria sem descricao" % ("/".join(r["methods"]), r["path"], r["file"], r["line"]))
     esperado = documentacao(rs)
     try:
         atual = open(DOCS, encoding="utf-8").read()

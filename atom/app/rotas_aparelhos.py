@@ -97,6 +97,7 @@ def _bmpcc_disconnect():
 
 @app.route('/api/rec/targets', methods=['POST'])
 def api_rec_target():
+    """Os devices que gravam com o REC de grupo. {\"id\": x, \"on\": true | false} ou {\"toggle\": x} muda um so; {\"targets\": [ids]} troca a lista inteira. Devolve a lista."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "the body must be a JSON object"}), 400
@@ -556,6 +557,7 @@ def api_devices_batch():
 
 @app.route('/api/rec/strict', methods=['POST'])
 def api_strict_rec():
+    """{\"on\": true | false}: o modo estrito do REC. Ligado, uma BMPCC que pare sem o bridge lho pedir levanta alarme."""
     on = bool(_body().get("on", False))
     state["strict_rec"] = on
     save_settings()

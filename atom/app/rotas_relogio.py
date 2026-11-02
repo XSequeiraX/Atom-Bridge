@@ -497,6 +497,7 @@ def api_ltc_set_pi_clock():
 
 @app.route('/api/time/ltc/clear', methods=['POST'])
 def api_ltc_clear():
+    """Esquece o LTC guardado como fonte de relogio. Nao mexe no relogio do Atom."""
     state["_ltc_jam"] = None
     save_settings()
     log_event("Stored LTC cleared")

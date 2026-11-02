@@ -10,11 +10,13 @@ from nucleo import (NO_CACHE, _body, app, log_event)
 
 @app.route('/login')
 def pagina_login():
+    """A pagina do PIN."""
     return acesso.LOGIN_PAGE, 200, NO_CACHE
 
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
+    """{\"pin\": \"1234\"}: abre uma sessao com o PIN da pagina (cookie HttpOnly). 401 se o PIN esta errado, 429 depois de muitas tentativas. Do Atom e da Tailscale entra-se sem PIN."""
     d = _body()
     token, err, code = acesso.login(request.remote_addr or "", str(d.get("pin") or ""))
     if not token:
@@ -31,6 +33,7 @@ def api_login():
 
 @app.route('/api/logout', methods=['POST'])
 def api_logout():
+    """Fecha a sessao da pagina (apaga o cookie)."""
     acesso.logout(request.cookies.get(acesso.COOKIE))
     resp = jsonify({"ok": True})
     resp.delete_cookie(acesso.COOKIE, path="/")
@@ -83,26 +86,31 @@ def load_page(name):
 
 @app.route('/')
 def index():
+    """A pagina principal: REC, cameras, gateways, relogio, rede e sistema."""
     return load_page("ui.html"), 200, NO_CACHE
 
 
 @app.route('/view')
 def view():
+    """A pagina so de leitura: o estado do rig sem botoes de comando, em letra grande para ver ao longe."""
     return load_page("view.html"), 200, NO_CACHE
 
 
 @app.route('/shootlog')
 def shootlog_page():
+    """O shoot log (takes, timecodes e clips) para ler e descarregar."""
     return load_page("shootlog.html"), 200, NO_CACHE
 
 
 @app.route('/eventlog')
 def eventlog_page():
+    """O registo de eventos do bridge."""
     return load_page("eventlog.html"), 200, NO_CACHE
 
 
 @app.route('/manifest.json')
 def manifest():
+    """O manifesto da app web (adicionar ao ecra principal do telemovel)."""
     return jsonify({
         "name": "Camera Bridge",
         "short_name": "Camera",
@@ -139,6 +147,7 @@ def fonts(nome):
 
 @app.route('/sw.js')
 def service_worker():
+    """O service worker da pagina (nunca guarda em cache o que vem de /api/)."""
     sw = """
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
@@ -157,6 +166,7 @@ _icone = []          # (corpo, tipo) gerado uma vez: converter o SVG a cada pedi
 @app.route('/icon-512.png')
 @app.route('/favicon.ico')   # o browser pede-o sozinho em todas as paginas (sem ele, um 404 na consola de cada uma)
 def icon():
+    """O icone da app (192 e 512 px) e o favicon que os browsers pedem sozinhos."""
     if _icone:
         return _icone[0][0], 200, {'Content-Type': _icone[0][1]}
     # Generate a simple SVG-based PNG icon
@@ -177,6 +187,7 @@ def icon():
 
 @app.route('/f6card')
 def f6card_page():
+    """A pagina do cartao SD do F6: ler o cartao, cruzar com o shoot log, ouvir, renomear e arrumar as takes."""
     return load_page("f6card.html"), 200, NO_CACHE
 
 

@@ -22,6 +22,7 @@ def api_c3():
 
 @app.route('/api/gateways/c3/enabled', methods=['POST'])
 def api_c3_enabled():
+    """{\"on\": true | false}: liga ou desliga o gateway C3 da BMPCC principal. Desligado, o bridge deixa de o procurar. Recusado a gravar."""
     # Desligado, o bridge deixa de procurar o C3 e de tentar religar a BMPCC por ele.
     on = bool(_body().get("on"))
     if not on and anything_recording():
@@ -34,6 +35,7 @@ def api_c3_enabled():
 
 @app.route('/api/gateways/c3/host', methods=['POST'])
 def api_c3_host():
+    """{\"host\": endereco}: o endereco do C3 da BMPCC principal (vazio apaga). 409 a gravar, ou se o endereco e de um C3 extra ou de um S3."""
     h = str(_body().get("host") or "").strip()
     if anything_recording():
         return jsonify({"ok": False, "error": "recording: change the C3 after the take"}), 409
@@ -326,6 +328,7 @@ def api_gopros_gateway_add():
 
 @app.route('/api/gateways/s3/remove', methods=['POST'])
 def api_gopros_gateway_remove():
+    """{\"gw\": n}: tira um gateway S3 (qualquer, tambem o primeiro) do bridge e as GoPro dele saem das listas; o gateway e os emparelhamentos ficam como estao. Recusado a gravar."""
     n = _gp_gw(_body())
     if not n:
         return jsonify({"ok": False, "error": "gw: invalid"}), 400
