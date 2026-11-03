@@ -27,7 +27,8 @@ permissions:
 
 jobs:
   verificar:
-    runs-on: ubuntu-latest
+    # Fixo (nao ubuntu-latest): o sony_ctl precisa da libxml2.so.2 e o Ubuntu mais novo ja nao a traz; os outros fluxos nao dependem disto
+    runs-on: ubuntu-24.04
     steps:
       # Accao fixa por commit (uma etiqueta pode ser mudada; o commit nao)
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4

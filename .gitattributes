@@ -16,3 +16,6 @@ atom-install/** text eol=lf
 *.zip binary
 *.so binary
 atom/app/sony/sony_ctl binary
+*.dll binary
+*.exe binary
+*.lib binary

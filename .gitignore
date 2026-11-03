@@ -20,11 +20,6 @@ gw_fw_pendente.json
 .env
 *.pem
 
-# Sony Camera Remote SDK: o SDK em si (headers, documentacao, exemplos) nunca entra no repositorio, so o sony_ctl ja
-# compilado com as bibliotecas de que precisa (atom/app/sony/AVISO-SONY.md)
-CrSDK_*/
-atom/app/sony/modelos.inc
-
 # Caches e compilados
 __pycache__/
 *.pyc
@@ -68,3 +63,10 @@ f6_faders_*.log
 
 # Testes e sondas: ficam so na maquina de quem desenvolve
 tests/
+
+# Sony Camera Remote SDK: o SDK em si (headers, documentacao, exemplos) nunca entra no repositorio publico, so o sony_ctl ja
+# compilado com as bibliotecas de que precisa (atom/app/sony/AVISO-SONY.md). No privado vive em sdk/ (a excepcao abaixo; o
+# ci/publicar.sh tira a pasta sdk/ do que vai para o publico e recusa publicar se algum SDK la ficar).
+CrSDK_*/
+!/sdk/sony/CrSDK_*/
+atom/app/sony/modelos.inc

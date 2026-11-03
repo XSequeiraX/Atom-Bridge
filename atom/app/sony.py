@@ -21,7 +21,8 @@ import time
 import gravar
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-SONY_CTL = os.path.join(AQUI, "sony", "sony_ctl")
+# No Windows o ajudante e um .exe (compilar_win.ps1); o resto e igual: as DLL do SDK ao lado, na mesma pasta.
+SONY_CTL = os.path.join(AQUI, "sony", "sony_ctl" + (".exe" if os.name == "nt" else ""))
 CONFIRM = 6.0            # s para a camara confirmar REC/STOP (RecordingState)
 RESPOSTA = 4.0           # s para o ajudante responder a um comando
 RELIGAR = 10.0           # s entre tentativas de ligar uma camara que nao respondeu
@@ -531,7 +532,7 @@ class Fleet:
         while True:
             cmd = self._cmd()
             if not cmd:
-                self.motivo = "Sony helper missing in %s (update the bridge from GitHub)" % os.path.dirname(SONY_CTL)
+                self.motivo = "Sony helper missing in %s (update the bridge)" % os.path.dirname(SONY_CTL)
                 if not avisado and self.cams:
                     self.log("Sony: %s" % self.motivo)
                 avisado = True

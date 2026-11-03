@@ -20,7 +20,16 @@ else
 fi
 git -C "$T/pub" rm -rq --ignore-unmatch . >/dev/null 2>&1 || true
 git archive "$REF" | tar -x -C "$T/pub"
+# O que NUNCA vai para o publico: os SDKs da Sony e da Canon (licenca propria, so ficam no privado), o que deles sai compilado
+# so para a versao Windows, e o fluxo que os usa (sem o SDK, falharia no publico).
+EXCLUIR="${EXCLUIR-sdk atom/app/sony_win .github/workflows/sony-windows.yml}"   # (vazio so no teste da guarda)
+for x in $EXCLUIR; do rm -rf "$T/pub/$x"; done
 git -C "$T/pub" add -A -f            # -f: ficheiros versionados que o .gitignore tambem apanharia (*.bin, *.csv)
+# Guarda: se algum SDK entrar mesmo assim (um caminho novo, um engano), nao se publica nada. (As bibliotecas de execucao da
+# Sony em atom/app/sony, libCr_Core.so e CrAdapter/*.so, sao as que a licenca deixa distribuir com a aplicacao: nao contam.)
+if git -C "$T/pub" ls-files | grep -E '^sdk/|EDSDK|CrSDK|/CRSDK/|CameraRemote_SDK\.h$|Cr_Core\.(dll|lib)$'; then
+    echo "ERRO: ha ficheiros de um SDK no que ia para o publico (acima). Nada foi enviado."; exit 1
+fi
 if git -C "$T/pub" diff --cached --quiet; then echo "o publico ja esta em dia (origem $ORIGEM)"; exit 0; fi
 git -C "$T/pub" diff --cached --stat | tail -5
 [ "${1:-}" = "--push" ] || { echo "(so a mostrar: --push para enviar)"; exit 0; }

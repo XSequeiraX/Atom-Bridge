@@ -11,6 +11,7 @@ Sai com 1 ao primeiro grupo que falhe, a dizer o que falhou.
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -282,9 +283,38 @@ def instalador():
     return erros
 
 
+def sony_windows():
+    """O que e do Windows no sony_ctl.cpp, testado no Linux: o conversor de texto UTF-16 -> UTF-8 (texto_utf8.h), a vista Linux do
+    codigo (fonte_hash.py) e a sintaxe do que so compila no Windows."""
+    pasta = os.path.join(RAIZ, "atom", "app", "sony")
+    erros = []
+    tmp = tempfile.mkdtemp(prefix="sony-win-")
+    exe = os.path.join(tmp, "utf8")
+    r = subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", os.path.join(pasta, "texto_utf8_teste.cpp"), "-o", exe],
+                       capture_output=True, text=True, cwd=pasta)
+    if r.returncode:
+        return ["texto_utf8_teste.cpp nao compilou:\n" + r.stderr[-600:]]
+    r = subprocess.run([exe], capture_output=True, text=True)
+    if r.returncode or r.stdout.strip() != "ok":
+        erros.append("texto_utf8_teste falhou: " + (r.stdout + r.stderr)[-400:])
+    sys.path.insert(0, pasta)
+    import fonte_hash
+    # a vista Linux tira os blocos do Windows e as suas diretivas, e mais nada
+    amostra = "a\n#ifdef _WIN32\nw1\n#else\nl1\n#endif\nb\n#ifndef _WIN32\nl2\n#else\nw2\n#endif\nc\n"
+    if fonte_hash.vista_linux(amostra) != "a\nl1\nb\nl2\nc\n":
+        erros.append("fonte_hash.vista_linux: %r" % fonte_hash.vista_linux(amostra))
+    for mau in ("#ifdef _WIN32\n#if X\n#endif\n#endif\n", "#ifdef _WIN32\nx\n"):
+        try:
+            fonte_hash.vista_linux(mau)
+            erros.append("fonte_hash devia recusar %r" % mau)
+        except ValueError:
+            pass
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def sony_ctl():
     """O sony_ctl do repositorio: corresponde ao sony_ctl.cpp (sony_ctl.fonte) e arranca (SDK, modelos) neste Linux x86_64."""
-    import hashlib
     import json
     import platform
     pasta = os.path.join(RAIZ, "atom", "app", "sony")
@@ -293,8 +323,11 @@ def sony_ctl():
         fonte = open(os.path.join(pasta, "sony_ctl.fonte")).read().split()[0]
     except (OSError, IndexError):
         return ["falta atom/app/sony/sony_ctl.fonte: recompilar com sony/compilar.sh"]
-    if fonte != hashlib.sha256(open(os.path.join(pasta, "sony_ctl.cpp"), "rb").read()).hexdigest():
-        erros.append("o sony_ctl.cpp mudou e o sony_ctl nao foi recompilado (sony/compilar.sh <SDK> atom/app/sony)")
+    sys.path.insert(0, pasta)
+    import fonte_hash
+    with open(os.path.join(pasta, "sony_ctl.cpp"), encoding="utf-8", newline="") as f:
+        if fonte != fonte_hash.hash_de(f.read(), "linux"):   # a vista Linux: sem os blocos _WIN32 (fonte_hash.py)
+            erros.append("o sony_ctl.cpp mudou e o sony_ctl nao foi recompilado (sony/compilar.sh <SDK> atom/app/sony)")
     if platform.machine() != "x86_64":
         return erros
     try:
@@ -314,7 +347,7 @@ if __name__ == "__main__":
     ok = True
     for nome, f in (("Python (compila, pyflakes)", python), ("API (api_check)", api),
                     ("JavaScript das paginas", javascript), ("Consola no simulador", consola),
-                    ("Sony com o simulador do ajudante", sony), ("Instalador: copia com um programa a correr", instalador),
+                    ("Sony com o simulador do ajudante", sony), ("Sony no Windows: conversor de texto e vista Linux", sony_windows), ("Instalador: copia com um programa a correr", instalador),
                     ("iPhone: obturador com 1 casa decimal", iphone_obturador),
                     ("Erros de rede curtos (#34)", erros_curtos)):
         ok = grupo(nome, f()) and ok

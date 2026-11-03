@@ -41,5 +41,6 @@ cp -f "$LIB/libCr_Core.so" "$DEST/"
 cp -f "$LIB"/CrAdapter/*.so "$DEST/CrAdapter/"
 strip "$DEST/sony_ctl" 2>/dev/null || true
 # De que codigo saiu este sony_ctl: o CI avisa quando o sony_ctl.cpp mudou e o programa no repositorio ficou para tras.
-echo "$(sha256sum "$AQUI/sony_ctl.cpp" | cut -d' ' -f1)  sony_ctl.cpp" > "$DEST/sony_ctl.fonte"
+# (o hash e o da vista Linux do codigo, sem os blocos _WIN32: ver fonte_hash.py)
+echo "$(python3 "$AQUI/fonte_hash.py" linux "$AQUI/sony_ctl.cpp")  sony_ctl.cpp" > "$DEST/sony_ctl.fonte"
 echo "sony_ctl installed in $DEST (SDK from $1)"

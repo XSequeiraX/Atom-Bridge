@@ -30,6 +30,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include "texto_utf8.h"
+#endif
 
 #include "CameraRemote_SDK.h"
 #include "CrDeviceProperty.h"
@@ -37,6 +42,31 @@
 #include "IDeviceCallback.h"
 
 using namespace SCRSDK;
+#ifdef _WIN32
+// No Windows o SDK compila-se com UNICODE: os textos de um ICrCameraObjectInfo (modelo, tipo de ligacao, IP) sao caracteres
+// largos. Este adaptador converte-os uma vez para UTF-8 e tem os mesmos metodos que o cmd_enum usa, por isso o resto fica igual.
+class InfoUtf8 {
+public:
+    explicit InfoUtf8(const ICrCameraObjectInfo* i) : i_(i) {
+        if (!i_) return;
+        modelo_ = texto::utf8(i_->GetModel());
+        tipo_ = texto::utf8(i_->GetConnectionTypeName());
+        ip_ = texto::utf8(i_->GetIPAddressChar(), i_->GetIPAddressCharSize());
+    }
+    bool ok() const { return i_ != nullptr; }
+    const InfoUtf8* operator->() const { return this; }
+    const char* GetModel() const { return modelo_.c_str(); }
+    const char* GetConnectionTypeName() const { return tipo_.c_str(); }
+    const char* GetIPAddressChar() const { return ip_.c_str(); }
+    CrInt32u GetIPAddressCharSize() const { return (CrInt32u)ip_.size(); }
+    CrInt32u GetSSHsupport() const { return i_->GetSSHsupport(); }
+    CrInt8u* GetId() const { return i_->GetId(); }
+    CrInt32u GetIdSize() const { return i_->GetIdSize(); }
+private:
+    const ICrCameraObjectInfo* i_;
+    std::string modelo_, tipo_, ip_;
+};
+#endif
 
 // {"ILCE-7M4", CrCameraDeviceModel_ILCE_7M4}, ...: gerado do CrDefines.h do SDK instalado (gerar_modelos.py), para um
 // SDK mais novo trazer os modelos novos sem mexer aqui.
@@ -265,8 +295,13 @@ static void cmd_enum() {
     o << "{\"ev\":\"found\",\"cameras\":[";
     if (e == CrError_None && lista) {
         for (CrInt32u i = 0; i < lista->GetCount(); i++) {
+#ifdef _WIN32
+            const InfoUtf8 c(lista->GetCameraObjectInfo(i));
+            if (!c.ok()) continue;
+#else
             const ICrCameraObjectInfo* c = lista->GetCameraObjectInfo(i);
             if (!c) continue;
+#endif
             if (i) o << ",";
             o << "{\"model\":\"" << esc(c->GetModel() ? c->GetModel() : "") << "\",\"connection\":\""
               << esc(c->GetConnectionTypeName() ? c->GetConnectionTypeName() : "") << "\",\"ip\":\""
@@ -297,6 +332,12 @@ static std::vector<std::string> partir(const std::string& s) {
 }
 
 int main() {
+#ifdef _WIN32
+    // O Python escreve \r\n no Windows e o bridge espera eventos terminados em \n: os dois lados em binario (o \r que vier no
+    // fim de uma linha de comando e espaco em branco para o partir()).
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     std::ios::sync_with_stdio(false);
     if (!Init()) { emitir("{\"ev\":\"fatal\",\"error\":\"SDK Init failed\"}"); return 1; }
     emitir("{\"ev\":\"ready\",\"sdk\":\"" + hex(GetSDKVersion()) + "\"}");
