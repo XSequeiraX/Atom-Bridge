@@ -9,6 +9,7 @@
 # Variaveis opcionais:
 #   ATOM_USER       o utilizador do Atom (por defeito quem chamou o sudo)
 #   AP_SSID         nome do AP das cameras; se faltar, e pedido
+#   WEB_PIN         PIN da pagina web (4 a 12 digitos); se faltar e ainda nao ha PIN, e pedido (so num terminal)
 #   AP_PSK          password do AP das cameras; se faltar e o AP nao existir,
 #                   e pedida (tem de ser a que as cameras ja tem guardada)
 #
@@ -427,6 +428,7 @@ step "7/7 Start"
 CONCLUIDO=1             # daqui em diante este passo trata da reposicao ele proprio (o bridge novo nao respondeu)
 install -m 755 "$HERE/system/bridge-repor-codigo.sh" /usr/local/bin/bridge-repor-codigo.sh
 systemctl daemon-reload
+pin_da_pagina                               # numa instalacao nova pede o PIN da pagina (WEB_PIN=... define-o sem perguntar)
 # Reiniciar o bridge a meio de uma take corta-a: a actualizacao so foi recusada se ja se gravava ao pedi-la, e o REC
 # pode ter comecado durante o git pull ou o apt. Espera-se pelo STOP (esperar_stop, em lib_app.sh). NO_WAIT_REC=1
 # reinicia na mesma.

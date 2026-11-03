@@ -3718,6 +3718,7 @@ def _demo_tirar_do_rig():
 def main():
     """Arranque (chamado pelo bridge.py)."""
     log_event("Camera Bridge starting...")
+    acesso.pedir_pin_no_arranque()          # num terminal e sem PIN: pergunta (Enter segue sem); como servico nao pergunta
     load_settings()
     carregar_event_log()
     _aparar_event_log()

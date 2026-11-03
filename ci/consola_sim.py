@@ -25,6 +25,7 @@ import pyte
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CEN, POSTS, LIMPA, T0 = ["normal"], [""], [""], [0.0]
+PIN = [True]             # ha PIN da pagina? (o cenario "sempin" arranca sem)
 TERMOS = [None]          # None: ja aceites; False: por aceitar (cenario "termos"); True: aceitou-se agora
 MUDOU = {"alias": {}, "name": {}}   # o que a consola mudou (alias e nomes): o simulador passa a devolve-lo, como o bridge
 
@@ -111,6 +112,14 @@ class H(http.server.BaseHTTPRequestHandler):
             elif body.get("name"):
                 MUDOU["name"][m.group(1)] = body["name"]
             return self._send(200, {"ok": True})
+        if p == "/api/security/pin":
+            if self.command == "POST":
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                PIN[0] = bool(body.get("pin"))
+                open(POSTS[0], "a").write(json.dumps({"PIN": bool(PIN[0])}) + "\n")
+                return self._send(200, {"ok": True, "pin_set": PIN[0]})
+            return self._send(200, {"ok": True, "pin_set": PIN[0]})
         if p == "/api/slate/take/skip":
             open(LIMPA[0], "w").close(); open(POSTS[0], "a").write(json.dumps({"SKIP": True}) + "\n")
             return self._send(200, {"ok": True})
@@ -130,6 +139,7 @@ def correr(cols, rows, cenario="normal", teclas=(), consola=None):
     """O ecra (lista de linhas) depois de arrancar a consola no cenario e carregar nas teclas."""
     tmp = tempfile.mkdtemp(prefix="consola-sim-")
     TERMOS[0] = False if cenario == "termos" else None
+    PIN[0] = cenario != "sempin"
     MUDOU["alias"].clear(); MUDOU["name"].clear()
     CEN[0], POSTS[0], LIMPA[0], T0[0] = cenario, os.path.join(tmp, "posts.json"), os.path.join(tmp, "take_cleared"), time.time()
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)

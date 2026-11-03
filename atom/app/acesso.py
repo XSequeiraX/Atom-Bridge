@@ -16,10 +16,12 @@ recusado (uma pagina qualquer aberta no portatil ou no iPad nao consegue mandar 
 """
 import hashlib
 import hmac
+import getpass
 import ipaddress
 import json
 import os
 import secrets
+import sys
 import threading
 import time
 from urllib.parse import urlsplit
@@ -99,6 +101,39 @@ def definir_pin(pin):
     with _lock:
         _sessoes.clear()
     return True, None
+
+
+PEDIR_PIN = ("No web PIN is set. Without one, phones and iPads on the cameras' Wi-Fi (or any other network) cannot open the\n"
+             "page; this computer (and Tailscale) always can. Choose a PIN of 4 to 12 digits now, or press Enter to go on without.")
+
+
+def pedir_pin_no_arranque(entrada=None, saida=print, interativo=None):
+    """Pede o PIN da pagina ao arrancar o bridge, se ainda nao ha nenhum. So num terminal (sem terminal, como um servico do
+    systemd, nao pergunta nada) e nunca bloqueia: Enter segue sem PIN. BRIDGE_PIN_PROMPT=0 desliga. True se perguntou.
+    `entrada`/`saida`/`interativo`: para o teste (o PIN escreve-se sem eco, com getpass)."""
+    if tem_pin() or os.environ.get("BRIDGE_PIN_PROMPT") == "0":
+        return False
+    if interativo is None:
+        interativo = bool(sys.stdin and sys.stdin.isatty() and sys.stdout and sys.stdout.isatty())
+    if not interativo:
+        return False
+    entrada = entrada or getpass.getpass
+    saida(PEDIR_PIN)
+    while True:
+        p1 = entrada("PIN (4 to 12 digits, Enter = no PIN): ")
+        if not p1:
+            saida("Going on without a PIN (set one later: console > GLOBAL SETTINGS > Web PIN).")
+            return True
+        if not (p1.isdigit() and 4 <= len(p1) <= 12):
+            saida("The PIN must be 4 to 12 digits.")
+            continue
+        if entrada("The same PIN again: ") != p1:
+            saida("The two PINs differ: try again.")
+            continue
+        ok, err = definir_pin(p1)
+        saida("Web PIN set." if ok else "Could not save the PIN: %s" % err)
+        if ok:
+            return True
 
 
 def _pin_certo(pin):

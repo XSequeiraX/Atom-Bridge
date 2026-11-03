@@ -49,6 +49,11 @@ CONSOLA = [
      ["More  FX3 B"], ["More  A7 IV"]),
     ("dados da take", "100x40", "fim", ["!wait:4"], ["TAKE 7 DONE"]),
     # Os avisos de licenca: sem aceitar nao se entra; a consola so carrega depois do "y".
+    # O PIN da pagina pede-se ao arrancar a consola, se nao ha nenhum (depois dos avisos de licenca); "n" segue, "y" define-o
+    ("PIN: pergunta ao arrancar", "100x30", "sempin", [], ["No web PIN is set", "Set a PIN now?"], ["GATEWAYS"]),
+    ("PIN: nao agora", "100x40", "sempin", ["n", "!wait:2"], ["GATEWAYS", "REC  VIA"], ["Set a PIN now?"]),
+    ("PIN: define", "100x40", "sempin", ["y", "4821\\r", "4821\\r", "!wait:2"], ["Web PIN set"]),
+    ("PIN: ja ha, nao pergunta", "100x40", "normal", [], ["GATEWAYS"], ["No web PIN is set"]),
     ("avisos de licenca", "100x30", "termos", [], ["LICENSES AND NOTICES"], ["GATEWAYS"]),
     ("avisos aceites", "100x40", "termos", ["\\r", "y", "!wait:2"], ["GATEWAYS", "REC  VIA"], ["Accept these notices"]),
     ("avisos recusados", "100x30", "termos", ["\\r", "n", "!wait:2"], ["Accept these notices"], ["GATEWAYS", "REC  VIA"]),
@@ -313,6 +318,95 @@ def sony_windows():
     return erros
 
 
+def pin_arranque():
+    """O PIN da pagina pede-se ao arrancar (acesso.pedir_pin_no_arranque) e numa instalacao nova (pin_da_pagina do instalador)."""
+    import shutil
+    import stat
+    sys.path.insert(0, os.path.join(RAIZ, "atom", "app"))
+    import acesso
+    erros = []
+    tmp = tempfile.mkdtemp(prefix="pin-")
+    acesso.PIN_PATH = os.path.join(tmp, "pin.json")
+    antigo = os.environ.pop("BRIDGE_PIN_PROMPT", None)
+
+    def corre(respostas, **kw):
+        it, falas = iter(respostas), []
+        r = acesso.pedir_pin_no_arranque(entrada=lambda _p: next(it), saida=falas.append, **kw)
+        return r, " ".join(falas)
+
+    def sem_pin():
+        if acesso.tem_pin():
+            os.remove(acesso.PIN_PATH)
+
+    try:
+        # bridge.py num terminal, sem PIN: pede duas vezes e define; a sessao antiga cai
+        r, _ = corre(["4821", "4821"], interativo=True)
+        if not (r and acesso.tem_pin() and acesso._pin_certo("4821")):
+            erros.append("com 4821 duas vezes devia definir o PIN")
+        # ja ha PIN: nao pergunta
+        r, _ = corre([], interativo=True)
+        if r:
+            erros.append("com PIN definido nao devia perguntar")
+        # curto, depois diferente, depois certo
+        sem_pin()
+        r, falas = corre(["12", "123456", "654321", "123456", "123456"], interativo=True)
+        if not (acesso.tem_pin() and acesso._pin_certo("123456")) or "4 to 12" not in falas or "differ" not in falas:
+            erros.append("PIN curto e PIN diferente: devia recusar e acabar a definir o 123456 (%r)" % falas)
+        # Enter: segue sem PIN
+        sem_pin()
+        r, falas = corre([""], interativo=True)
+        if not r or acesso.tem_pin() or "without a PIN" not in falas:
+            erros.append("Enter devia seguir sem PIN")
+        # sem terminal (servico do systemd): nao pergunta
+        r, _ = corre([], interativo=False)
+        if r or acesso.tem_pin():
+            erros.append("sem terminal nao devia perguntar nem definir")
+        # BRIDGE_PIN_PROMPT=0
+        os.environ["BRIDGE_PIN_PROMPT"] = "0"
+        r, _ = corre([], interativo=True)
+        os.environ.pop("BRIDGE_PIN_PROMPT")
+        if r:
+            erros.append("BRIDGE_PIN_PROMPT=0 devia desligar o pedido")
+
+        # O instalador (lib_app.sh: pin_da_pagina): WEB_PIN, sem terminal, PIN invalido, PIN que ja existe
+        opt = os.path.join(tmp, "opt")
+        os.makedirs(opt)
+        shutil.copy(os.path.join(RAIZ, "atom", "app", "acesso.py"), opt)
+        lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+
+        def instalador_pede(web_pin=None):
+            env = {k: v for k, v in os.environ.items() if k != "WEB_PIN"}
+            if web_pin is not None:
+                env["WEB_PIN"] = web_pin
+            r = subprocess.run(["bash", "-c", '. "$1"; pin_da_pagina "$2"; echo rc=$?', "_", lib, opt], env=env, capture_output=True,
+                               text=True, stdin=subprocess.DEVNULL, timeout=60)
+            return r.stdout + r.stderr
+        pin = os.path.join(opt, "pin.json")
+        out = instalador_pede()
+        if os.path.exists(pin) or "rc=0" not in out or "no web PIN is set" not in out:
+            erros.append("instalador sem terminal nem WEB_PIN: devia avisar e seguir, sem PIN: %r" % out[-200:])
+        out = instalador_pede("12")
+        if os.path.exists(pin) or "rc=0" not in out or "WARNING" not in out:
+            erros.append("instalador com WEB_PIN invalido: devia avisar e seguir sem PIN: %r" % out[-200:])
+        out = instalador_pede("987654")
+        if not os.path.exists(pin) or "rc=0" not in out:
+            erros.append("instalador com WEB_PIN=987654 devia criar o pin.json: %r" % out[-200:])
+        else:
+            if stat.S_IMODE(os.stat(pin).st_mode) != 0o600:
+                erros.append("o pin.json devia ficar 0600")
+            acesso.PIN_PATH = pin
+            if not acesso._pin_certo("987654"):
+                erros.append("o pin.json do instalador nao valida o 987654")
+            instalador_pede("111111")          # um PIN que ja existe nao se muda numa actualizacao
+            if not acesso._pin_certo("987654"):
+                erros.append("o instalador mudou um PIN que ja existia")
+    finally:
+        if antigo is not None:
+            os.environ["BRIDGE_PIN_PROMPT"] = antigo
+        shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def sony_ctl():
     """O sony_ctl do repositorio: corresponde ao sony_ctl.cpp (sony_ctl.fonte) e arranca (SDK, modelos) neste Linux x86_64."""
     import json
@@ -347,7 +441,7 @@ if __name__ == "__main__":
     ok = True
     for nome, f in (("Python (compila, pyflakes)", python), ("API (api_check)", api),
                     ("JavaScript das paginas", javascript), ("Consola no simulador", consola),
-                    ("Sony com o simulador do ajudante", sony), ("Sony no Windows: conversor de texto e vista Linux", sony_windows), ("Instalador: copia com um programa a correr", instalador),
+                    ("Sony com o simulador do ajudante", sony), ("Sony no Windows: conversor de texto e vista Linux", sony_windows), ("PIN da pagina ao arrancar e no instalador", pin_arranque), ("Instalador: copia com um programa a correr", instalador),
                     ("iPhone: obturador com 1 casa decimal", iphone_obturador),
                     ("Erros de rede curtos (#34)", erros_curtos)):
         ok = grupo(nome, f()) and ok

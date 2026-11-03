@@ -6959,6 +6959,10 @@ class Ui:
                 s, r = self.call("Web PIN", "POST", "/api/security/pin", {"pin": ""})
                 self.done("Web PIN removed", s, r)
             return
+        self.pin_novo()
+
+    def pin_novo(self):
+        """Pede o PIN novo (duas vezes, em asteriscos) e define-o no bridge."""
         p1 = self.prompt("New PIN (4 to 12 digits):", secret=True)
         if not p1:
             return
@@ -6972,6 +6976,22 @@ class Ui:
         s, r = self.call("Web PIN", "POST", "/api/security/pin", {"pin": p1})
         self.done("Web PIN set", s, r, ["Open sessions were closed: phones and iPads enter the PIN again."]
                   if s == 200 and isinstance(r, dict) and r.get("ok") else None)
+
+    def pin_arranque(self):
+        """Ao arrancar a consola, sem PIN da pagina definido, pergunta se se quer um (depois dos avisos de licenca). Nao bloqueia:
+        "n" segue sem PIN (volta a perguntar no arranque seguinte, ate haver um). Sem o bridge a responder, ou um mais antigo sem a
+        rota, nao pergunta."""
+        s, d = api("GET", "/api/security/pin", timeout=6)
+        if s != 200 or not isinstance(d, dict) or d.get("pin_set") is not False:
+            return
+        self.scr.erase()
+        self.put(1, 1, "Web PIN", self.attr("bold"))
+        self.put(3, 1, "No web PIN is set.", self.attr("yellow"))
+        self.put(4, 1, "Phones and iPads on the camera Wi-Fi cannot open the page until you set one.")
+        self.put(5, 1, "This computer (and Tailscale) always can. Change it later: GLOBAL SETTINGS > Web PIN.")
+        self.scr.refresh()
+        if self.ask("Set a PIN now? (y = yes, n = not now)", "yn") == "y":
+            self.pin_novo()
 
     def vigiar_take(self):
         """Abre a pagina de dados da take quando o bridge a pede (a ultima camara parou: /api/status take_pending), so no ecra
@@ -7618,6 +7638,7 @@ def main(scr):
     try:
         if not ui.termos():
             return None
+        ui.pin_arranque()
         return ui.loop()
     finally:
         ui.font_restore()   # nunca deixar a consola com a fonte pequena
