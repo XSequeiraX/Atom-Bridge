@@ -27,7 +27,7 @@ import time
 from urllib.parse import urlsplit
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-PIN_PATH = os.path.join(AQUI, "pin.json")
+PIN_PATH = os.environ.get("BRIDGE_PIN_PATH") or os.path.join(AQUI, "pin.json")   # (o instalador define-o: o PIN fica no sitio final antes do codigo la estar)
 COOKIE = "bridge_session"
 SESSAO_S = 12 * 3600            # um dia de filmagem
 ITERACOES = 200000
@@ -103,37 +103,92 @@ def definir_pin(pin):
     return True, None
 
 
+def terminal_de_verdade(f):
+    """Ha mesmo alguem num terminal neste ficheiro (stdin / stdout)? isatty() chega no Linux; no Windows o NUL (`< NUL`, um servico
+    sem consola) tambem diz que e um terminal, e o getpass ficava eternamente a espera de uma tecla: la confirma-se que e uma consola
+    de verdade (GetConsoleMode so funciona num handle de consola)."""
+    try:
+        if f is None or not f.isatty():
+            return False
+        if sys.platform == "win32":
+            import ctypes
+            import msvcrt
+            modo = ctypes.c_uint()
+            return bool(ctypes.windll.kernel32.GetConsoleMode(msvcrt.get_osfhandle(f.fileno()), ctypes.byref(modo)))
+        return True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 PEDIR_PIN = ("No web PIN is set. Without one, phones and iPads on the cameras' Wi-Fi (or any other network) cannot open the\n"
-             "page; this computer (and Tailscale) always can. Choose a PIN of 4 to 12 digits now, or press Enter to go on without.")
+             "page; this computer (and Tailscale) always can. Choose a PIN of 4 to 12 digits.")
 
 
-def pedir_pin_no_arranque(entrada=None, saida=print, interativo=None):
-    """Pede o PIN da pagina ao arrancar o bridge, se ainda nao ha nenhum. So num terminal (sem terminal, como um servico do
-    systemd, nao pergunta nada) e nunca bloqueia: Enter segue sem PIN. BRIDGE_PIN_PROMPT=0 desliga. True se perguntou.
-    `entrada`/`saida`/`interativo`: para o teste (o PIN escreve-se sem eco, com getpass)."""
-    if tem_pin() or os.environ.get("BRIDGE_PIN_PROMPT") == "0":
-        return False
-    if interativo is None:
-        interativo = bool(sys.stdin and sys.stdin.isatty() and sys.stdout and sys.stdout.isatty())
-    if not interativo:
-        return False
+def pedir_pin(obrigatorio=False, entrada=None, saida=print):
+    """Pede o PIN da pagina (sem eco, duas vezes) e define-o. True se ficou definido. `obrigatorio`: Enter nao salta, pergunta ate
+    haver um PIN (so Ctrl+C / Ctrl+D desistem: False). Sem `obrigatorio`, Enter segue sem PIN (True, sem PIN definido).
+    `entrada`/`saida`: para o teste."""
     entrada = entrada or getpass.getpass
     saida(PEDIR_PIN)
     while True:
-        p1 = entrada("PIN (4 to 12 digits, Enter = no PIN): ")
+        try:
+            p1 = entrada("PIN (4 to 12 digits%s): " % ("" if obrigatorio else ", Enter = no PIN"))
+        except (EOFError, KeyboardInterrupt):
+            saida("")
+            return False
         if not p1:
+            if obrigatorio:
+                saida("A PIN is required.")
+                continue
             saida("Going on without a PIN (set one later: console > GLOBAL SETTINGS > Web PIN).")
             return True
         if not (p1.isdigit() and 4 <= len(p1) <= 12):
             saida("The PIN must be 4 to 12 digits.")
             continue
-        if entrada("The same PIN again: ") != p1:
+        try:
+            outro = entrada("The same PIN again: ")
+        except (EOFError, KeyboardInterrupt):
+            saida("")
+            return False
+        if outro != p1:
             saida("The two PINs differ: try again.")
             continue
         ok, err = definir_pin(p1)
         saida("Web PIN set." if ok else "Could not save the PIN: %s" % err)
         if ok:
             return True
+
+
+def pedir_pin_no_arranque(entrada=None, saida=print, interativo=None, obrigatorio=None):
+    """Pede o PIN da pagina ao arrancar o bridge, se ainda nao ha nenhum. So num terminal (sem terminal, como um servico do
+    systemd, nao pergunta nada). No Windows e obrigatorio (nao ha instalador que o peca de outra forma); no Linux Enter segue
+    sem PIN (o instalador ja o pediu). BRIDGE_PIN_PROMPT=0 desliga. True se perguntou.
+    `entrada`/`saida`/`interativo`/`obrigatorio`: para o teste (o PIN escreve-se sem eco, com getpass)."""
+    if tem_pin() or os.environ.get("BRIDGE_PIN_PROMPT") == "0":
+        return False
+    if interativo is None:
+        interativo = terminal_de_verdade(sys.stdin) and terminal_de_verdade(sys.stdout)
+    if not interativo:
+        return False
+    if obrigatorio is None:
+        obrigatorio = sys.platform == "win32"
+    pedir_pin(obrigatorio=obrigatorio, entrada=entrada, saida=saida)
+    return True
+
+
+def definir_do_ambiente_ou_perguntar():
+    """Para o instalador: define o PIN com WEB_PIN (4 a 12 digitos) ou pergunta, sempre obrigatorio. Sai com 0 se ficou definido."""
+    if tem_pin():
+        return 0
+    pin = os.environ.get("WEB_PIN")
+    if pin:
+        ok, err = definir_pin(pin)
+        print("Web PIN set." if ok else "ERROR: could not set the web PIN: %s" % err)
+        return 0 if ok else 1
+    if not terminal_de_verdade(sys.stdin):
+        print("No terminal to ask for the web PIN: set WEB_PIN=<4 to 12 digits> or run this in a terminal")
+        return 1
+    return 0 if pedir_pin(obrigatorio=True) else 1
 
 
 def _pin_certo(pin):
@@ -280,3 +335,14 @@ document.getElementById('f').onsubmit = e => {
     .catch(() => { m.textContent = 'no answer'; });
 };
 </script></body></html>"""
+
+
+if __name__ == "__main__":
+    # python acesso.py definir  -> define o PIN (WEB_PIN ou pergunta, obrigatorio); sai com 0 se ha PIN
+    # python acesso.py tem      -> sai com 0 se ha PIN, 1 se nao
+    comando = sys.argv[1] if len(sys.argv) > 1 else ""
+    if comando == "definir":
+        sys.exit(definir_do_ambiente_ou_perguntar())
+    if comando == "tem":
+        sys.exit(0 if tem_pin() else 1)
+    sys.exit("usage: acesso.py definir | tem")

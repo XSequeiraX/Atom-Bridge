@@ -357,6 +357,19 @@ def pin_arranque():
         r, falas = corre([""], interativo=True)
         if not r or acesso.tem_pin() or "without a PIN" not in falas:
             erros.append("Enter devia seguir sem PIN")
+        # obrigatorio (instalacao): Enter nao salta, pergunta ate haver PIN; Ctrl+D / Ctrl+C desistem sem PIN
+        sem_pin()
+        it = iter(["", "", "4821", "4821"])
+        falas = []
+        r = acesso.pedir_pin(obrigatorio=True, entrada=lambda _p: next(it), saida=falas.append)
+        if not (r and acesso.tem_pin() and acesso._pin_certo("4821")) or " ".join(falas).count("A PIN is required") != 2:
+            erros.append("obrigatorio: Enter devia ser recusado duas vezes e acabar com o PIN 4821 (%r)" % falas)
+        sem_pin()
+
+        def desiste(_p):
+            raise EOFError
+        if acesso.pedir_pin(obrigatorio=True, entrada=desiste, saida=lambda _t: None) or acesso.tem_pin():
+            erros.append("obrigatorio: Ctrl+D devia desistir sem PIN")
         # sem terminal (servico do systemd): nao pergunta
         r, _ = corre([], interativo=False)
         if r or acesso.tem_pin():
@@ -368,38 +381,46 @@ def pin_arranque():
         if r:
             erros.append("BRIDGE_PIN_PROMPT=0 devia desligar o pedido")
 
-        # O instalador (lib_app.sh: pin_da_pagina): WEB_PIN, sem terminal, PIN invalido, PIN que ja existe
+        # O instalador (lib_app.sh: pin_da_pagina / pin_instalar). O PIN e obrigatorio numa instalacao nova.
+        app = os.path.join(tmp, "app")
         opt = os.path.join(tmp, "opt")
+        os.makedirs(app)
         os.makedirs(opt)
-        shutil.copy(os.path.join(RAIZ, "atom", "app", "acesso.py"), opt)
+        shutil.copy(os.path.join(RAIZ, "atom", "app", "acesso.py"), app)
         lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+        pin = os.path.join(opt, "pin.json")
 
-        def instalador_pede(web_pin=None):
-            env = {k: v for k, v in os.environ.items() if k != "WEB_PIN"}
+        def instalador(nova, web_pin=None):
+            env = {k: v for k, v in os.environ.items() if k not in ("WEB_PIN", "BRIDGE_PIN_PATH")}
             if web_pin is not None:
                 env["WEB_PIN"] = web_pin
-            r = subprocess.run(["bash", "-c", '. "$1"; pin_da_pagina "$2"; echo rc=$?', "_", lib, opt], env=env, capture_output=True,
-                               text=True, stdin=subprocess.DEVNULL, timeout=60)
+            r = subprocess.run(["bash", "-c", '. "$1"; pin_da_pagina "$2" "$3" "$4"; echo "rc=$? novo=${PIN_NOVO:+sim}"; pin_instalar "$2"',
+                                "_", lib, opt, app, nova], env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
             return r.stdout + r.stderr
-        pin = os.path.join(opt, "pin.json")
-        out = instalador_pede()
+        out = instalador("1")
+        if os.path.exists(pin) or "rc=1" not in out or "required" not in out:
+            erros.append("instalacao nova sem terminal nem WEB_PIN: devia parar (rc=1), sem PIN: %r" % out[-220:])
+        out = instalador("0")
         if os.path.exists(pin) or "rc=0" not in out or "no web PIN is set" not in out:
-            erros.append("instalador sem terminal nem WEB_PIN: devia avisar e seguir, sem PIN: %r" % out[-200:])
-        out = instalador_pede("12")
-        if os.path.exists(pin) or "rc=0" not in out or "WARNING" not in out:
-            erros.append("instalador com WEB_PIN invalido: devia avisar e seguir sem PIN: %r" % out[-200:])
-        out = instalador_pede("987654")
-        if not os.path.exists(pin) or "rc=0" not in out:
-            erros.append("instalador com WEB_PIN=987654 devia criar o pin.json: %r" % out[-200:])
+            erros.append("actualizacao sem terminal nem WEB_PIN: devia avisar e seguir (rc=0), sem PIN: %r" % out[-220:])
+        out = instalador("1", "12")
+        if os.path.exists(pin) or "rc=1" not in out:
+            erros.append("instalacao nova com WEB_PIN invalido: devia parar (rc=1): %r" % out[-220:])
+        out = instalador("1", "987654")
+        if "rc=0" not in out or "novo=sim" not in out or not os.path.exists(pin):
+            erros.append("instalacao nova com WEB_PIN=987654: devia recolher o PIN e pin_instalar poe-lo em opt: %r" % out[-220:])
         else:
             if stat.S_IMODE(os.stat(pin).st_mode) != 0o600:
                 erros.append("o pin.json devia ficar 0600")
             acesso.PIN_PATH = pin
             if not acesso._pin_certo("987654"):
                 erros.append("o pin.json do instalador nao valida o 987654")
-            instalador_pede("111111")          # um PIN que ja existe nao se muda numa actualizacao
-            if not acesso._pin_certo("987654"):
-                erros.append("o instalador mudou um PIN que ja existia")
+            out = instalador("1", "111111")        # ja ha PIN: nao se pergunta nem se muda (uma actualizacao)
+            if "novo=sim" in out or not acesso._pin_certo("987654"):
+                erros.append("o instalador mudou um PIN que ja existia: %r" % out[-220:])
+        sobras = [f for f in os.listdir("/tmp") if f.startswith("bridge-pin.")]
+        if sobras:
+            erros.append("ficaram ficheiros temporarios do PIN em /tmp: %s" % sobras[:3])
     finally:
         if antigo is not None:
             os.environ["BRIDGE_PIN_PROMPT"] = antigo

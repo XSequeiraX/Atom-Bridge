@@ -9,7 +9,7 @@
 # Variaveis opcionais:
 #   ATOM_USER       o utilizador do Atom (por defeito quem chamou o sudo)
 #   AP_SSID         nome do AP das cameras; se faltar, e pedido
-#   WEB_PIN         PIN da pagina web (4 a 12 digitos); se faltar e ainda nao ha PIN, e pedido (so num terminal)
+#   WEB_PIN         PIN da pagina web (4 a 12 digitos); OBRIGATORIO numa instalacao nova: se faltar, e pedido (num terminal)
 #   AP_PSK          password do AP das cameras; se faltar e o AP nao existir,
 #                   e pedida (tem de ser a que as cameras ja tem guardada)
 #
@@ -38,6 +38,12 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "run it with sudo"
 id "$ATOM_USER" >/dev/null 2>&1 || die "user '$ATOM_USER' does not exist"
 [ -f "$APP/bridge.py" ] || die "no bridge code in $APP (run the installer from the repository clone)"
+
+# O PIN da pagina e obrigatorio numa instalacao nova: pede-se agora, antes do trabalho demorado (WEB_PIN=... define-o sem perguntar).
+PRIMEIRA_INSTALACAO=0
+[ -f "$OPT/bridge.py" ] || PRIMEIRA_INSTALACAO=1
+pin_da_pagina "$OPT" "$APP" "$PRIMEIRA_INSTALACAO" \
+    || die "set the web PIN: run the installer in a terminal, or WEB_PIN=<4 to 12 digits> sudo -E bash install_atom.sh"
 
 # ----------------------------------------------------------------------------
 step "1/7 Packages"
@@ -428,7 +434,7 @@ step "7/7 Start"
 CONCLUIDO=1             # daqui em diante este passo trata da reposicao ele proprio (o bridge novo nao respondeu)
 install -m 755 "$HERE/system/bridge-repor-codigo.sh" /usr/local/bin/bridge-repor-codigo.sh
 systemctl daemon-reload
-pin_da_pagina                               # numa instalacao nova pede o PIN da pagina (WEB_PIN=... define-o sem perguntar)
+pin_instalar                                # o PIN da pagina recolhido no inicio, agora que o codigo ja esta em /opt
 # Reiniciar o bridge a meio de uma take corta-a: a actualizacao so foi recusada se ja se gravava ao pedi-la, e o REC
 # pode ter comecado durante o git pull ou o apt. Espera-se pelo STOP (esperar_stop, em lib_app.sh). NO_WAIT_REC=1
 # reinicia na mesma.

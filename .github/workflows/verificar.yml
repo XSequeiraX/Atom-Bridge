@@ -28,6 +28,7 @@ permissions:
 jobs:
   verificar:
     # Fixo (nao ubuntu-latest): o sony_ctl precisa da libxml2.so.2 e o Ubuntu mais novo ja nao a traz; os outros fluxos nao dependem disto
+    timeout-minutes: 20
     runs-on: ubuntu-24.04
     steps:
       # Accao fixa por commit (uma etiqueta pode ser mudada; o commit nao)

@@ -24,26 +24,42 @@ e_dado() {
     return 1
 }
 
-# O PIN da pagina web: quem nao esta no Atom nem no Tailscale so entra com ele (acesso.py). Sem PIN, nenhum telemovel nem iPad na
-# rede das cameras abre a pagina. Pede-se numa instalacao nova (e em qualquer corrida do instalador num terminal em que ainda nao
-# ha PIN); WEB_PIN=... (4 a 12 digitos) define-o sem perguntar. Sem terminal (a actualizacao pelo botao, o atualizar_atom.sh) nao
-# pergunta nada e nunca falha: avisa. O PIN fica em $opt/pin.json (so o hash, 0600), que as actualizacoes nao tocam (e_dado).
+# O PIN da pagina web: quem nao esta no Atom nem no Tailscale so entra com ele (acesso.py). Sem PIN nenhum telemovel nem iPad na rede
+# das cameras abre a pagina. E OBRIGATORIO numa instalacao nova: pede-se logo no inicio (antes dos pacotes, para falhar depressa) e
+# so se acaba se houver PIN. WEB_PIN=... (4 a 12 digitos) define-o sem perguntar; num terminal pergunta (sem eco, duas vezes, e Enter
+# nao salta). Sem terminal nem WEB_PIN: uma instalacao nova PARA (return 1); uma actualizacao (o botao, o atualizar_atom.sh) avisa e
+# segue, para nao a partir. Um PIN que ja existe nunca se pergunta nem se muda.
+# O PIN recolhido fica num ficheiro temporario ($PIN_NOVO, so o hash, 0600): $opt so se cria no passo de copiar o codigo (uma pasta
+# que ja la estivesse fazia da instalacao nova uma "actualizacao" com copia de seguranca). pin_instalar poe-no no sitio no fim.
 pin_da_pagina() {
     local opt="${1:-$OPT}"
+    local app="${2:-$opt}" nova="${3:-0}"
+    PIN_NOVO=""
     [ -e "$opt/pin.json" ] && return 0
-    [ -f "$opt/acesso.py" ] || return 0
-    if [ -n "${WEB_PIN:-}" ]; then
-        if (cd "$opt" && python3 -c "import os, sys, acesso; ok, err = acesso.definir_pin(os.environ['WEB_PIN']); print('Web PIN set.' if ok else 'WARNING: could not set the web PIN: ' + str(err)); sys.exit(0 if ok else 1)"); then
-            return 0
-        fi
+    [ -f "$app/acesso.py" ] || return 0
+    local tmp
+    tmp="$(mktemp -u /tmp/bridge-pin.XXXXXX)"
+    if BRIDGE_PIN_PATH="$tmp" python3 "$app/acesso.py" definir; then
+        PIN_NOVO="$tmp"
         return 0
     fi
-    if [ -t 0 ] && [ -t 1 ]; then
-        (cd "$opt" && python3 -c "import acesso; acesso.pedir_pin_no_arranque()") || echo "WARNING: could not ask for the web PIN"
-    else
-        echo "NOTE: no web PIN is set: phones and iPads on the cameras' Wi-Fi cannot open the page. Set one in the console (GLOBAL SETTINGS > Web PIN) or run the installer in a terminal / with WEB_PIN=..."
+    rm -f "$tmp" "$tmp.tmp"
+    if [ "$nova" = 1 ]; then
+        echo "ERROR: the web PIN is required for a new install." >&2
+        return 1
     fi
+    echo "NOTE: no web PIN is set: phones and iPads on the cameras' Wi-Fi cannot open the page. Set one in the console (GLOBAL SETTINGS > Web PIN) or run the installer in a terminal / with WEB_PIN=..."
     return 0
+}
+
+# Poe o PIN recolhido por pin_da_pagina no sitio final (depois de o codigo estar em $opt).
+pin_instalar() {
+    local opt="${1:-$OPT}"
+    [ -n "${PIN_NOVO:-}" ] && [ -f "$PIN_NOVO" ] || return 0
+    [ -e "$opt/pin.json" ] || install -m 600 "$PIN_NOVO" "$opt/pin.json"
+    rm -f "$PIN_NOVO"
+    PIN_NOVO=""
+    echo "web PIN saved in $opt/pin.json"
 }
 
 gravar_agora() {
