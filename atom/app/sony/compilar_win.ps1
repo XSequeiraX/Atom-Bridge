@@ -32,13 +32,14 @@ if (-not $vs) { throw "Visual Studio with the C++ tools not found" }
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
 $exe = Join-Path $Tmp "sony_ctl.exe"
 # A linha do cl vai para um .bat: as aspas e as barras do PowerShell para o cmd davam erros dificeis de ver. Compila-se na
-# pasta temporaria (o sony_ctl.obj fica la, sem /Fo).
+# pasta temporaria (o sony_ctl.obj fica la, sem /Fo). /Brepro: sem a hora no executavel, o mesmo codigo da os mesmos bytes
+# (senao cada compilacao dava um .exe diferente e o fluxo do GitHub fazia um commit novo de cada vez).
 $bat = Join-Path $Tmp "compilar.bat"
 @(
     "@echo off",
     "call `"$vcvars`" >nul",
     "if errorlevel 1 exit /b 1",
-    "cl /nologo /std:c++17 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /I`"$Inc`" /I`"$Tmp`" `"$Aqui\sony_ctl.cpp`" /Fe`"$exe`" /link /LIBPATH:`"$Lib`" Cr_Core.lib",
+    "cl /nologo /std:c++17 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /I`"$Inc`" /I`"$Tmp`" `"$Aqui\sony_ctl.cpp`" /Fe`"$exe`" /link /Brepro /LIBPATH:`"$Lib`" Cr_Core.lib",
     "exit /b %errorlevel%"
 ) | Set-Content -Path $bat -Encoding ascii
 Push-Location $Tmp
