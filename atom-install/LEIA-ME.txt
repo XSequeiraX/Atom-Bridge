@@ -9,7 +9,7 @@ Uso (no Atom, com o repositorio clonado)
   sudo bash atom-install/install_atom.sh                     aplica so o que falta
   AP_SSID='...' AP_PSK='...' sudo -E bash atom-install/install_atom.sh ...   evita as perguntas do AP
   Mais simples: bash atualizar_atom.sh (git pull + instalar), ou na consola GLOBAL SETTINGS > Update from GitHub.
-  O Atom actualiza-se do repositorio publico (https://github.com/XSequeiraX/Atom-Bridge-public), sem autenticacao.
+  O Atom actualiza-se do repositorio publico (https://github.com/XSequeiraX/Atom-Bridge), sem autenticacao.
   Os pacotes (apt, pip) so se revem quando a seccao dos pacotes do instalador muda ou falta alguma peca: um update
   que so traz codigo nao faz apt-get update. Para os rever a forca: sudo FORCE_PKGS=1 bash atom-install/install_atom.sh
   O esptool e o mpremote dos gateways vem do pip, num ambiente proprio (/opt/gw-tools): o esptool do Debian vem sem os

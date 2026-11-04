@@ -1,5 +1,5 @@
 #!/bin/bash
-# Passa o estado actual do main do repositorio privado para o publico (XSequeiraX/Atom-Bridge-public), sem o historico.
+# Passa o estado actual do main do repositorio privado para o publico (XSequeiraX/Atom-Bridge), sem o historico.
 #   bash ci/publicar.sh            mostra o que mudaria
 #   bash ci/publicar.sh --push     faz o commit no publico e envia
 # O publico tem a sua propria historia, so a avancar (um commit por sincronizacao): os Atom actualizam-se sempre em
@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REF="${PUBLICO_REF:-origin/main}"
-PUBLICO_URL="${PUBLICO_URL:-https://github.com/XSequeiraX/Atom-Bridge-public}"
+PUBLICO_URL="${PUBLICO_URL:-https://github.com/XSequeiraX/Atom-Bridge}"
 ORIGEM="$(git rev-parse --short "$REF")"
 ASSUNTO="$(git log -1 --format=%s "$REF")"
 T="$(mktemp -d)"

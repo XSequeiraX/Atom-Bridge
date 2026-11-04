@@ -12,7 +12,7 @@ if [ -f .git/index.lock ] && ! pgrep -x git >/dev/null; then
     rm -f .git/index.lock
 fi
 # Repositorio de onde se actualiza: o publico (sem autenticacao). BRIDGE_REPO_URL muda-o: o clone pode ter vindo de outro.
-URL="${BRIDGE_REPO_URL:-https://github.com/XSequeiraX/Atom-Bridge-public}"
+URL="${BRIDGE_REPO_URL:-https://github.com/XSequeiraX/Atom-Bridge}"
 BRANCH="main"
 export GIT_TERMINAL_PROMPT=0            # um repositorio que pede login falha logo, em vez de ficar a espera
 git remote set-url origin "$URL" 2>/dev/null || git remote add origin "$URL"

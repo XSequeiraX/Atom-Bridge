@@ -1129,7 +1129,7 @@ def _repo_da_instalacao():
 
 UPDATE_REPO = _repo_da_instalacao()
 # O repositorio publico (sem autenticacao); o mesmo do atualizar_atom.sh. BRIDGE_REPO_URL muda-o.
-UPDATE_URL = os.environ.get("BRIDGE_REPO_URL", "https://github.com/XSequeiraX/Atom-Bridge-public")
+UPDATE_URL = os.environ.get("BRIDGE_REPO_URL", "https://github.com/XSequeiraX/Atom-Bridge")
 
 UPDATE_LOG = "/var/log/bridge-update.log"
 

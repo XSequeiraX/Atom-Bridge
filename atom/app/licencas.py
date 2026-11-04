@@ -52,7 +52,7 @@ TEXTO = [
     "  Other components (libraries, fonts, firmware libraries) keep",
     "  their own open source licenses. Full details and texts:",
     "  AVISOS-LICENCAS.md and atom/app/sony/OSS-NOTICES.md, in",
-    "  github.com/XSequeiraX/Atom-Bridge-public.",
+    "  github.com/XSequeiraX/Atom-Bridge.",
     "",
     "NO WARRANTY",
     "  This software is provided 'as is', without warranty of any",
