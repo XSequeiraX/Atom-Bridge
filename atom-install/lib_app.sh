@@ -17,7 +17,7 @@ e_dado() {
     case "$1" in
         *.csv|*.log) return 0 ;;                     # shoot_log.csv, events.log e os arquivos com data
         settings.json|devices.json|usb_map.json|sftp.json|sftp_known_hosts|c3.json) return 0 ;;
-        bmpccs.json|iphones.json|gopros.json|sonys.json|termos.json|gw_fw.json|gw_fw_pendente.json|profiles.json) return 0 ;;
+        bmpccs.json|ap_modo.json|iphones.json|gopros.json|sonys.json|termos.json|gw_fw.json|gw_fw_pendente.json|profiles.json) return 0 ;;
         pin.json|ap.conf|repo.path|version.json|take_aberto.json|wifi.json|gw_token) return 0 ;;
         escrito.json|*/escrito.json|*.bak|*.bak-*|*.tmp|*.falhou|__pycache__/*|*/__pycache__/*) return 0 ;;
     esac

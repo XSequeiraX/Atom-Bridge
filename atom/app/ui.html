@@ -1693,7 +1693,8 @@
             <input class="cfg-in" id="bkPath" placeholder="remote folder">
             <button class="head-btn" style="width:100%;padding:9px" onclick="saveBackupCfg()">SAVE</button>
         </div>
-        <button class="sys-btn warn" onclick="netAction('ap_cameras','Restart the camera AP? The Canon bodies will drop.')">RESTART CAMERA WIFI</button>
+        <button class="sys-btn warn" id="btnApRestart" onclick="netAction('ap_cameras','Restart the camera AP? The Canon bodies will drop.')">RESTART CAMERA WIFI</button>
+        <button class="sys-btn warn" onclick="switchApMode()" id="btnApMode">CAMERAS' AP: --</button>
         <button class="sys-btn warn" onclick="resetBluetooth()" id="btnResetBt">RESTART BLUETOOTH</button>
         <button class="sys-btn warn" onclick="netAction('restart_nm','Restart NetworkManager? The whole network blinks.')">RESTART NETWORKMANAGER</button>
         <button class="sys-btn warn" onclick="netAction('restart_bridge','Restart the bridge? The BMPCC drops for ~30s.')">RESTART BRIDGE</button>
@@ -2139,10 +2140,29 @@
         if (n.ap_cams && n.ap_cams.length) quem.push(escHtml(n.ap_cams.join(', ')));
         if ((n.ap_devices || []).length) quem.push(escHtml(n.ap_devices.map(o => o.name + (o.ip ? ' (' + o.ip + ')' : '')).join(', ')));
         else if (n.ap_others) quem.push(n.ap_others + (n.ap_others > 1 ? ' others' : ' other'));
-        L.push(marca(!!n.ap_up, 'EXT WI-FI' + (n.ap_ssid ? ' &middot; ' + escHtml(n.ap_ssid) : '')));
-        L.push('&nbsp;&nbsp;' + (n.ap_up
-            ? 'ch' + escHtml(n.ap_chan || '?') + ' &middot; ' + (quem.join(' &middot; ') || 'no clients')
-            : 'offline'));
+        if (n.ap_mode === 'external') {
+            L.push(marca(!!n.ap_up, 'EXTERNAL AP &middot; Ethernet ' + escHtml(n.ap_iface || '?')));
+            L.push('&nbsp;&nbsp;' + (n.ap_up ? (quem.join(' &middot; ') || 'no clients') : 'offline (cable?)'));
+        } else {
+            L.push(marca(!!n.ap_up, 'EXT WI-FI' + (n.ap_ssid ? ' &middot; ' + escHtml(n.ap_ssid) : '')));
+            L.push('&nbsp;&nbsp;' + (n.ap_up
+                ? 'ch' + escHtml(n.ap_chan || '?') + ' &middot; ' + (quem.join(' &middot; ') || 'no clients')
+                : 'offline'));
+        }
+        apModo = n.ap_mode || 'dongle'; apEth = n.ap_eth || null;
+        const bm = document.getElementById('btnApMode');
+        if (bm) {
+            bm.textContent = "CAMERAS' AP: " + (apModo === 'external' ? 'EXTERNAL (ETHERNET)' : 'DONGLE');
+            // Sem porta Ethernet, passar para o externo nao faz sentido: o botao fica desligado (voltar ao dongle sempre pode).
+            const semPorta = apModo !== 'external' && !apEth;
+            bm.disabled = semPorta;
+            bm.title = semPorta ? 'No Ethernet port found for an external AP' : '';
+        }
+        // O que so serve a um dos modos: o LED e do dongle; no modo externo o "reiniciar" e o da porta.
+        const led = document.getElementById('ledBtn');
+        if (led) led.style.display = apModo === 'external' ? 'none' : '';
+        const br = document.getElementById('btnApRestart');
+        if (br) br.textContent = apModo === 'external' ? 'RESTART AP ETHERNET PORT' : 'RESTART CAMERA WIFI';
         const svc = Object.entries(n.services || {});
         const maus = svc.filter(([, v]) => v !== 'active').map(([k]) => k);
         if (svc.length) {
@@ -2258,12 +2278,25 @@
             if (n.ap_cams && n.ap_cams.length) who.push(esc(n.ap_cams.join(', ')));
             if (n.ap_others) who.push(n.ap_others + (n.ap_others > 1 ? ' others' : ' other'));
             if (!who.length) who.push(n.ap_clients ? esc(n.ap_clients) + ' unknown' : 'no clients');
-            lines.push(n.ap_up ? ('AP ch' + esc(n.ap_chan || '?') + ' \u00B7 ' + who.join(' \u00B7 '))
+            lines.push(n.ap_up ? ((n.ap_mode === 'external' ? 'AP ext' : 'AP ch' + esc(n.ap_chan || '?')) + ' \u00B7 ' + who.join(' \u00B7 '))
                      : 'AP down');
             const svc = Object.entries(n.services || {})
                         .filter(([k, v]) => v !== 'active').map(([k]) => k).join(', ');
             if (svc) lines.push('parados: ' + esc(svc));
             el.innerHTML = lines.join('<br>');
+        });
+    }
+    let apModo = 'dongle', apEth = null;
+    function switchApMode() {
+        const alvo = apModo === 'external' ? 'dongle' : 'external';
+        if (alvo === 'external' && !apEth) { alert('No Ethernet port found for the external AP.'); return; }
+        const q = alvo === 'external'
+            ? 'Switch the cameras\' AP to the external one on Ethernet ' + apEth + '? The dongle AP goes off; the Atom takes 192.168.4.1 and the DHCP on that cable. The external AP (bridge mode) must broadcast the same name and password. The cameras drop for a moment.'
+            : 'Switch the cameras\' AP back to the dongle? The Ethernet stops serving the cameras. They drop for a moment.';
+        if (!confirm(q)) return;
+        api('net/ap_mode', 'POST', {mode: alvo}).then(r => {
+            if (r && r.error) alert(r.error);
+            else setTimeout(refreshNet, 3000);
         });
     }
     function netAction(action, question) {

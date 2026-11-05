@@ -25,6 +25,7 @@ import time
 
 from flask import Flask, jsonify, request
 
+import ap_modo
 import canon_ccapi
 import c3_bm
 import f6_ltc
@@ -2496,10 +2497,13 @@ def instantaneo_condicoes():
     partes = [f"uplink {uplink_ssid() or modo or '?'}"
               + (f" {mhz}MHz" if mhz else " down")]
     try:
-        info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
-        canal = next((l.strip().split()[1] for l in info.splitlines()
-                      if l.strip().startswith("channel")), "?")
-        partes.append(f"AP ch{canal}" if "type AP" in info else "AP down")
+        if ap_modo.externo():
+            partes.append("AP ext " + ("up" if ap_modo.no_ar(ap_modo.iface_ap(AP_IFACE)) else "down"))
+        else:
+            info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
+            canal = next((l.strip().split()[1] for l in info.splitlines()
+                          if l.strip().startswith("channel")), "?")
+            partes.append(f"AP ch{canal}" if "type AP" in info else "AP down")
     except Exception:
         partes.append("AP ?")
     n = len(adaptadores_presentes())

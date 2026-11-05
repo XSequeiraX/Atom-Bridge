@@ -210,6 +210,117 @@ def iphone_obturador():
     return erros
 
 
+def ap_externo():
+    """O modo da rede das cameras (dongle | AP externo na Ethernet): ap_modo.py com um nmcli de mentira. Confirma que o perfil
+    que sai desce ANTES de o outro subir, que o perfil da Ethernet e partilhado em 192.168.4.1/24, que uma falha volta ao
+    dongle sem mudar o modo guardado, e que a regra "sem partilha" segue a porta do modo."""
+    app = os.path.join(RAIZ, "atom", "app")
+    sys.path.insert(0, app)
+    import ap_modo
+    erros = []
+    tmp = tempfile.mkdtemp(prefix="apmodo-")
+    ap_modo.CAMINHO = os.path.join(tmp, "ap_modo.json")
+    cmds, estado = [], {"perfis": ["PS_Control"], "falha_eth": False, "nmcli": True}
+
+    def falso(cmd, timeout=40):
+        cmds.append(list(cmd))
+        ok = subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[0] != "nmcli":
+            return ok
+        if not estado["nmcli"]:
+            return subprocess.CompletedProcess(cmd, 127, "", "nmcli is not installed")
+        a = [x for x in cmd if x != "-w" and x != "25"][1:]
+        if a[:1] == ["-v"]:
+            return ok
+        if a[:4] == ["-t", "-f", "DEVICE,TYPE,STATE", "device"]:
+            return subprocess.CompletedProcess(cmd, 0, "ps-uplink:wifi:connected\nps-control:wifi:connected\n"
+                                               "enp3s0:ethernet:disconnected\ndocker0:ethernet:unmanaged\nlo:loopback:unmanaged\n", "")
+        if a[:4] == ["-t", "-f", "NAME", "connection"]:
+            return subprocess.CompletedProcess(cmd, 0, "\n".join(estado["perfis"]) + "\n", "")
+        if a[:1] == ["connection"] and a[1:2] == ["add"]:
+            estado["perfis"].append("PS_Control_Eth")
+        if a[:3] == ["connection", "up", "PS_Control_Eth"] and estado["falha_eth"]:
+            return subprocess.CompletedProcess(cmd, 4, "", "Error: Connection activation failed: carrier not detected")
+        return ok
+
+    def pos(prefixo):
+        prefixo = [x for x in prefixo if x != "nmcli"]
+        return next((i for i, c in enumerate(cmds)
+                     if [x for x in c if x not in ("nmcli", "-w", "25")][:len(prefixo)] == prefixo), -1)
+
+    ap_modo._correr = falso
+    if ap_modo.modo() != "dongle" or ap_modo.externo():
+        erros.append("sem ficheiro o modo devia ser dongle: %r" % ap_modo.modo())
+    if [e["iface"] for e in ap_modo.ethernets()] != ["enp3s0"]:
+        erros.append("so a enp3s0 e Ethernet fisica (sem docker0, sem Wi-Fi): %r" % ap_modo.ethernets())
+    ok, msg = ap_modo.aplicar("external", ap_con="PS_Control", ap_if="ps-control")
+    if not ok or ap_modo.modo() != "external" or ap_modo.eth_guardada() != "enp3s0":
+        erros.append("aplicar(external) devia dar certo e guardar a enp3s0: %r %r" % (ok, msg))
+    add = next((c for c in cmds if "add" in c and "PS_Control_Eth" in c), None)
+    if not add or "shared" not in add or "192.168.4.1/24" not in add or "enp3s0" not in add:
+        erros.append("o perfil da Ethernet devia ser partilhado em 192.168.4.1/24 na enp3s0: %r" % add)
+    descer, subir = pos(["nmcli", "connection", "down", "PS_Control"]), pos(["connection", "up", "PS_Control_Eth"])
+    if descer < 0 or subir < 0 or descer > subir:
+        erros.append("o AP do dongle devia descer ANTES de a Ethernet subir (descer %d, subir %d)" % (descer, subir))
+    if pos(["connection", "modify", "PS_Control", "connection.autoconnect", "no"]) < 0:
+        erros.append("o AP do dongle devia ficar sem autoconnect no modo externo")
+    if ap_modo.iface_ap("ps-control") != "enp3s0":
+        erros.append("iface_ap no modo externo devia ser a enp3s0: %r" % ap_modo.iface_ap("ps-control"))
+    # de volta ao dongle
+    del cmds[:]
+    ok, msg = ap_modo.aplicar("dongle", ap_con="PS_Control", ap_if="ps-control")
+    if not ok or ap_modo.modo() != "dongle" or ap_modo.iface_ap("ps-control") != "ps-control":
+        erros.append("aplicar(dongle) devia dar certo: %r %r" % (ok, msg))
+    d1, u1 = pos(["connection", "down", "PS_Control_Eth"]), pos(["connection", "up", "PS_Control", "ifname", "ps-control"])
+    if d1 < 0 or u1 < 0 or d1 > u1:
+        erros.append("a Ethernet devia descer ANTES de o dongle subir (%d, %d)" % (d1, u1))
+    if pos(["connection", "modify", "PS_Control_Eth", "connection.autoconnect", "no"]) < 0:
+        erros.append("a Ethernet devia ficar sem autoconnect no modo dongle")
+    # falha ao subir a Ethernet (sem cabo): o modo nao muda e o dongle volta
+    estado["falha_eth"] = True
+    del cmds[:]
+    ok, msg = ap_modo.aplicar("external", ap_con="PS_Control", ap_if="ps-control")
+    if ok or ap_modo.modo() != "dongle" or "cable" not in msg:
+        erros.append("sem cabo devia falhar e deixar o modo dongle: %r %r %r" % (ok, msg, ap_modo.modo()))
+    if pos(["connection", "up", "PS_Control", "ifname", "ps-control"]) < 0:
+        erros.append("depois de falhar devia voltar a subir o AP do dongle")
+    estado["falha_eth"] = False
+    for novo, eth, quer in (("outro", None, "unknown mode"), ("external", "eth9", "not an Ethernet port")):
+        ok, msg = ap_modo.aplicar(novo, eth=eth)
+        if ok or quer not in msg:
+            erros.append("aplicar(%r, %r) devia recusar com %r: %r %r" % (novo, eth, quer, ok, msg))
+    estado["nmcli"] = False
+    ok, msg = ap_modo.aplicar("external")
+    if ok or "NetworkManager" not in msg or ap_modo.modo() != "dongle":
+        erros.append("sem nmcli devia recusar e deixar o modo: %r %r" % (ok, msg))
+    # os clientes da porta: so os vizinhos vivos
+    neigh = ("192.168.4.20 lladdr AA:BB:CC:00:00:01 REACHABLE\n192.168.4.21 lladdr aa:bb:cc:00:00:02 STALE\n"
+             "192.168.4.22 lladdr aa:bb:cc:00:00:03 FAILED\n192.168.4.23  FAILED\n")
+    ap_modo._correr = lambda cmd, timeout=40: subprocess.CompletedProcess(cmd, 0, neigh, "")
+    if ap_modo.clientes("enp3s0") != ["aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"]:
+        erros.append("clientes: so REACHABLE/STALE contam: %r" % ap_modo.clientes("enp3s0"))
+    # a regra "sem partilha" segue a porta do modo (o script le /opt/camera-bridge: trocam-se os caminhos)
+    sh = open(os.path.join(RAIZ, "atom-install", "system", "bridge-ap-nonat.sh")).read()
+    conf, modof = os.path.join(tmp, "ap.conf"), os.path.join(tmp, "ap_modo.json")
+    sh = sh.replace("/opt/camera-bridge/ap.conf", conf).replace("/opt/camera-bridge/ap_modo.json", modof)
+    sh = sh.replace('case "$1" in', 'echo "IF=$AP_IF"; exit 0\ncase "$1" in', 1)
+    open(conf, "w").write("AP_CON=Rig\nAP_IF=ps-control\n")
+    script = os.path.join(tmp, "nonat.sh")
+    open(script, "w").write(sh)
+    for conteudo, quer in (None, "ps-control"), ('{"modo": "dongle", "eth": "enp3s0"}', "ps-control"), \
+            ('{"modo": "external", "eth": "enp3s0"}', "enp3s0"):
+        if conteudo is None:
+            if os.path.exists(modof):
+                os.remove(modof)
+        else:
+            open(modof, "w").write(conteudo)
+        r = subprocess.run(["sh", script, "start"], capture_output=True, text=True)
+        if r.stdout.strip() != "IF=" + quer:
+            erros.append("bridge-ap-nonat com %r devia usar %s: %r %r" % (conteudo, quer, r.stdout, r.stderr))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def erros_curtos():
     """Os erros de rede chegam curtos a consola, a pagina e ao registo (issue #34), com as mensagens reais das bibliotecas;
     a copia do bridge-ctl.py da o mesmo que o atom/app/curto.py."""
@@ -464,6 +575,7 @@ if __name__ == "__main__":
                     ("JavaScript das paginas", javascript), ("Consola no simulador", consola),
                     ("Sony com o simulador do ajudante", sony), ("Sony no Windows: conversor de texto e vista Linux", sony_windows), ("PIN da pagina ao arrancar e no instalador", pin_arranque), ("Instalador: copia com um programa a correr", instalador),
                     ("iPhone: obturador com 1 casa decimal", iphone_obturador),
-                    ("Erros de rede curtos (#34)", erros_curtos)):
+                    ("Erros de rede curtos (#34)", erros_curtos),
+                    ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo)):
         ok = grupo(nome, f()) and ok
     sys.exit(0 if ok else 1)

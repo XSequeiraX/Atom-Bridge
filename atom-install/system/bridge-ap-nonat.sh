@@ -8,6 +8,12 @@ AP_IF=ps-control
 # "$(...)" correria como root).
 AP_CONF_IF="$(sed -n 's/^AP_IF=//p' /opt/camera-bridge/ap.conf 2>/dev/null | head -n1)"
 [ -n "$AP_CONF_IF" ] && AP_IF="$AP_CONF_IF"
+# No modo "AP externo" (ap_modo.json) quem serve as cameras e a porta Ethernet, nao o dongle.
+AP_MODO_F=/opt/camera-bridge/ap_modo.json
+if grep -q '"modo": *"external"' "$AP_MODO_F" 2>/dev/null; then
+    AP_ETH="$(sed -n 's/.*"eth": *"\([A-Za-z0-9._-]*\)".*/\1/p' "$AP_MODO_F" | head -n1)"
+    [ -n "$AP_ETH" ] && AP_IF="$AP_ETH"
+fi
 case "$1" in
     start)
         nft delete table inet bridge_ap_nonat 2>/dev/null || true

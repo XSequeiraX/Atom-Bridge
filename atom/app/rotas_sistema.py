@@ -2,6 +2,7 @@
 
 Parte do bridge (o arranque e o estado partilhado estao em nucleo.py). As rotas registam-se no app ao
 importar o modulo, no fim do nucleo."""
+import ap_modo
 import claquete
 import json
 import licencas
@@ -142,7 +143,7 @@ def ap_aparelhos(macs):
         except OSError:
             pass
     try:
-        for linha in _run(["ip", "neigh", "show", "dev", AP_IFACE], timeout=5).stdout.splitlines():
+        for linha in _run(["ip", "neigh", "show", "dev", ap_modo.iface_ap(AP_IFACE)], timeout=5).stdout.splitlines():
             p = linha.split()
             if "lladdr" in p:
                 ip_de[p[p.index("lladdr") + 1].lower()] = p[0]
@@ -502,8 +503,10 @@ def api_fault_clear():
 
 @app.route('/api/system/led', methods=['POST'])
 def api_led():
-    """{\"on\": true | false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED."""
+    """{\"on\": true | false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED; 409 no modo de AP externo (o dongle nao serve as cameras)."""
     on = bool(_body().get("on", True))
+    if ap_modo.externo():
+        return jsonify({"error": "The cameras' AP is the external one on Ethernet: there is no dongle LED to switch"}), 409
     if not apply_led(on):
         return jsonify({"error": "Dongle LED not found"}), 404
     state["led_on"] = on
@@ -684,15 +687,19 @@ def api_preflight():
     else:
         nota("Uplink", f"{uplink_ssid() or modo or '?'} \u00b7 {mhz} MHz"
                        + (" \u00b7 SHARES THE BAND WITH BLUETOOTH" if mhz < 3000 else ""))
-    try:
-        info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
-        no_ar = "type AP" in info
-        canal = next((l.strip().split()[1] for l in info.splitlines()
-                      if l.strip().startswith("channel")), "?")
-    except Exception:
-        no_ar, canal = False, "?"
-    nota("Camera AP", f"{AP_CON} up on channel {canal}" if no_ar else f"{AP_CON} offline")
-    if os.path.isdir("/sys/bus/usb/drivers/ath9k_htc"):                  # o dongle do AP (AR9271) precisa do firmware 1.4.0
+    if ap_modo.externo():
+        porta = ap_modo.iface_ap(AP_IFACE)
+        nota("Camera AP", f"external AP on {porta} up" if ap_modo.no_ar(porta) else f"external AP on {porta} offline (cable?)")
+    else:
+        try:
+            info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
+            no_ar = "type AP" in info
+            canal = next((l.strip().split()[1] for l in info.splitlines()
+                          if l.strip().startswith("channel")), "?")
+        except Exception:
+            no_ar, canal = False, "?"
+        nota("Camera AP", f"{AP_CON} up on channel {canal}" if no_ar else f"{AP_CON} offline")
+    if not ap_modo.externo() and os.path.isdir("/sys/bus/usb/drivers/ath9k_htc"):                  # o dongle do AP (AR9271) precisa do firmware 1.4.0
         fw_ok = any(os.path.isfile(d + "/ath9k_htc/htc_9271-1.4.0.fw") for d in ("/lib/firmware", "/usr/lib/firmware"))
         add(fw_ok, "AP dongle firmware", "1.4.0" if fw_ok else "missing: apt install firmware-ath9k-htc")
     try:
@@ -769,7 +776,7 @@ def api_net_status():
     out = {"uplink_ssid": None, "uplink_signal": None, "uplink_chan": None,
            "ap_chan": None, "ap_clients": None, "ap_cams": [], "ap_others": None,
            "ap_up": False, "ap_ssid": None, "ap_devices": [], "ap_known": [], "wifi_ifaces": [], "ap_iface": AP_IFACE,
-           "uplink_ip": None,
+           "uplink_ip": None, "ap_mode": ap_modo.modo(), "ap_eth": ap_modo.eth_iface(),
            "services": {}}
     try:
         # The uplink address, which is the one worth showing: it changes with
@@ -797,6 +804,29 @@ def api_net_status():
                 out["uplink_chan"] = line.strip().split()[1]
     except Exception:
         pass
+    if ap_modo.externo():
+        # AP externo na Ethernet: sem iw (nao ha radio aqui); quem esta ligado vem da tabela de vizinhos.
+        try:
+            porta = ap_modo.iface_ap(AP_IFACE)
+            out["ap_iface"] = porta
+            out["ap_up"] = ap_modo.no_ar(porta)
+            macs = ap_modo.clientes(porta) if out["ap_up"] else []
+            known = known_camera_macs()
+            out["ap_cams"] = sorted({known[m] for m in macs if m in known})
+            out["ap_clients"] = len(macs)
+            out["ap_others"] = len(macs) - sum(1 for m in macs if m in known)
+            out["ap_devices"] = ap_aparelhos([m for m in macs if m not in known])
+            out["ap_known"] = ap_memorizados(macs)
+            agora = ap_aparelhos(macs)
+            for o in agora:
+                if o["mac"] in known:
+                    o["name"], o["camera"] = known[o["mac"]], True
+            out["ap_now"] = agora
+        except Exception:
+            pass
+        out["wifi_ifaces"] = [i for i in wifi_interfaces() if i["iface"] != AP_IFACE] \
+            + [{"iface": out["ap_iface"], "type": "AP", "ssid": None, "channel": None}]
+        return jsonify(out)
     try:
         info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
         for line in info.splitlines():
@@ -831,7 +861,7 @@ def api_net_status():
 # the shoot depends on, so all of it is refused while a camera is rolling.
 NET_ACTIONS = {
     "ap_cameras":   (["nmcli", "-w", "25", "connection", "up", AP_CON, "ifname", AP_IFACE],
-                     "Restarting the camera AP"),
+                     "Restarting the camera AP"),          # (no modo externo: o perfil da Ethernet, ver api_net_action)
     "restart_nm":     (["systemctl", "restart", "NetworkManager"], "Restarting NetworkManager"),
 }
 
@@ -1005,6 +1035,9 @@ def api_net_action():
     if anything_recording():
         return jsonify({"error": "Recording — not touching the network now"}), 409
     cmd, msg = NET_ACTIONS[action]
+    if action == "ap_cameras" and ap_modo.externo():
+        cmd = ["nmcli", "-w", "25", "connection", "up", ap_modo.PERFIL_ETH, "ifname", ap_modo.iface_ap(AP_IFACE)]
+        msg = "Restarting the external AP port"
 
     def work():
         log_event(msg + "...")
@@ -1016,6 +1049,30 @@ def api_net_action():
 
     threading.Thread(target=work, daemon=True).start()
     return jsonify({"ok": True})
+
+
+@app.route('/api/net/ap_mode', methods=['GET', 'POST'])
+def api_net_ap_mode():
+    """Quem serve a rede das cameras. GET: {mode: dongle|external, eth: a porta Ethernet que o modo externo usaria, ports: as que existem}.
+    POST {\"mode\": \"dongle\" | \"external\", \"eth\": opcional}: passa de um para o outro (o perfil que sai desce antes de o outro subir;
+    no modo externo o Atom fica com 192.168.4.1 e o DHCP na Ethernet, e o AP externo tem de emitir o mesmo nome e password do
+    ps-control). Recusado a gravar: as cameras e os gateways perdem a rede por momentos."""
+    if request.method == 'GET':
+        return jsonify({"mode": ap_modo.modo(), "eth": ap_modo.eth_iface(), "ports": [e["iface"] for e in ap_modo.ethernets()]})
+    corpo = _body()
+    novo = corpo.get("mode")
+    if novo not in ap_modo.MODOS:
+        return jsonify({"error": "mode must be dongle or external"}), 400
+    if anything_recording():
+        return jsonify({"error": "Recording — not touching the network now"}), 409
+    if novo == ap_modo.modo() and not corpo.get("eth"):
+        return jsonify({"ok": True, "mode": novo, "message": "already in %s mode" % novo})
+    ok, msg = ap_modo.aplicar(novo, eth=corpo.get("eth"), ap_con=AP_CON, ap_if=AP_IFACE)
+    log_event("Camera AP mode -> %s: %s" % (novo, msg))
+    if not ok:
+        return jsonify({"error": msg}), 409
+    _run(["systemctl", "try-restart", "bridge-ap-nonat"], timeout=15)     # a regra "sem partilha" segue o modo (se estiver activa)
+    return jsonify({"ok": True, "mode": ap_modo.modo(), "message": msg})
 
 
 @app.route('/api/bluetooth/reset', methods=['POST'])

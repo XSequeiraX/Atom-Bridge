@@ -6133,9 +6133,14 @@ class Ui:
                 if st.get("uplink_24ghz"):
                     L.append(("  2.4 GHz: shares the air with Bluetooth", "yellow"))
                 L.append("")
-                L.append(("EXT WI-FI  %s" % (d.get("ap_ssid") or ""), "bold"))
-                L.append(("  %s   channel: %s" % ("UP" if d.get("ap_up") else "DOWN", d.get("ap_chan") or "-"),
-                          "green" if d.get("ap_up") else "red"))
+                if d.get("ap_mode") == "external":
+                    L.append(("CAMERAS' AP: EXTERNAL  (Ethernet %s)" % (d.get("ap_iface") or "-"), "bold"))
+                    L.append(("  %s   192.168.4.1 on the cable" % ("UP" if d.get("ap_up") else "DOWN (cable?)"),
+                              "green" if d.get("ap_up") else "red"))
+                else:
+                    L.append(("EXT WI-FI  %s" % (d.get("ap_ssid") or ""), "bold"))
+                    L.append(("  %s   channel: %s" % ("UP" if d.get("ap_up") else "DOWN", d.get("ap_chan") or "-"),
+                              "green" if d.get("ap_up") else "red"))
                 L.append("  clients: %s   cameras: %s" % (d.get("ap_clients"), ", ".join(d.get("ap_cams") or []) or "-"))
                 for o in d.get("ap_devices") or []:          # os outros, um por linha: nome, IP, MAC
                     L.append(("  %-24s %-15s %s" % (o["name"][:24], o.get("ip") or "-", o["mac"]),
@@ -6155,8 +6160,9 @@ class Ui:
                 L.append("  peers online: %s of %s" % (d.get("peers_online"), d.get("peers_total")))
                 for h in d.get("health") or []:
                     L.append(("  ! %s" % h, "yellow"))
-        L.append("")
-        L.append("Wi-Fi LED on the camera AP dongle: %s" % ("on" if st.get("led_on") else "off"))
+        if not (net and net[0] == 200 and isinstance(net[1], dict) and net[1].get("ap_mode") == "external"):
+            L.append("")
+            L.append("Wi-Fi LED on the camera AP dongle: %s" % ("on" if st.get("led_on") else "off"))
         return L
 
     # --- WIRELESS (Devices): uma entrada por interface Wi-Fi do Atom ----------
@@ -6191,10 +6197,16 @@ class Ui:
             nome = info.get("ssid") or (d.get("ap_ssid") if iface == ap_if else None) or iface
             if iface == ap_if:
                 agora, mem = d.get("ap_now") or [], d.get("ap_known") or []
+                externo = d.get("ap_mode") == "external"
                 entradas = [("status", "Status"),
                             ("devs", "Devices  (%d connected, %d remembered)" % (len(agora), len(mem))),
-                            ("led", "Wi-Fi LED  %s" % ("on" if self.st().get("led_on") else "off")),
-                            ("restart", "Restart %s" % nome)]
+                            ]
+                if externo or d.get("ap_eth"):          # passar para o externo sem porta Ethernet nao faz sentido: a entrada nem aparece
+                    entradas.append(("modo", "Cameras' AP: %s   (switch to %s)" % (
+                        "external, Ethernet" if externo else "dongle", "the dongle" if externo else "external, Ethernet")))
+                if not externo:
+                    entradas.append(("led", "Wi-Fi LED  %s" % ("on" if self.st().get("led_on") else "off")))
+                entradas.append(("restart", "Restart %s" % nome))
             else:
                 entradas = [("status", "Status")]
             i = self.menu("Settings %s" % nome, [e[1] for e in entradas], cor=COR["net"])
@@ -6212,6 +6224,20 @@ class Ui:
                 on = not bool(self.st().get("led_on"))
                 s, r = self.call("Wi-Fi LED %s" % ("on" if on else "off"), "POST", "/api/system/led", {"on": on})
                 self.done("Wi-Fi LED %s" % ("on" if on else "off"), s, r)
+            elif k == "modo":
+                alvo = "dongle" if d.get("ap_mode") == "external" else "external"
+                if alvo == "external":
+                    pergunta = ("Switch the cameras' AP to the external one on Ethernet %s?\n"
+                                "The dongle AP goes off; the Atom takes 192.168.4.1 and the DHCP on that cable. The external AP "
+                                "(bridge mode) must broadcast the same name and password. The cameras drop for a moment."
+                                % d["ap_eth"])
+                else:
+                    pergunta = ("Switch the cameras' AP back to the dongle?\nThe Ethernet stops serving the cameras. "
+                                "They drop for a moment.")
+                if self.confirm(pergunta):
+                    s, r = self.call("Cameras' AP -> %s" % alvo, "POST", "/api/net/ap_mode", {"mode": alvo})
+                    self.cache.drop("net")
+                    self.done("Cameras' AP -> %s" % alvo, s, r)
             elif k == "restart":
                 if self.confirm("Restart %s? The Canon bodies and the gateways drop for a moment." % nome):
                     s, r = self.call("Restart %s" % nome, "POST", "/api/net/action", {"action": "ap_cameras"})
@@ -6224,6 +6250,12 @@ class Ui:
         info = next((i for i in d.get("wifi_ifaces") or [] if i["iface"] == iface), {"iface": iface})
         L = [("Interface %s   %s" % (iface, info.get("type") or "?"), "bold")]
         if iface == ap_if:
+            if d.get("ap_mode") == "external":
+                L.append(("  external AP on the cable   %s" % ("UP" if d.get("ap_up") else "DOWN (cable?)"),
+                          "green" if d.get("ap_up") else "red"))
+                L.append("  the Atom serves 192.168.4.1 and the DHCP here; the AP must be in bridge mode")
+                L.append("  connected now: %s   cameras: %s" % (d.get("ap_clients"), ", ".join(d.get("ap_cams") or []) or "-"))
+                return L
             L.append(("  %s   %s   channel %s" % (d.get("ap_ssid") or "-", "UP" if d.get("ap_up") else "DOWN",
                                                   d.get("ap_chan") or "-"), "green" if d.get("ap_up") else "red"))
             L.append("  connected now: %s   cameras: %s" % (d.get("ap_clients"), ", ".join(d.get("ap_cams") or []) or "-"))

@@ -129,6 +129,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | Metodo | Caminho | O que faz |
 |---|---|---|
 | POST | `/api/net/action` | {"action": "ap_cameras" / "restart_nm" / "restart_bridge"}: reinicia o AP das cameras, o NetworkManager ou o bridge. Recusado a gravar. |
+| GET,POST | `/api/net/ap_mode` | Quem serve a rede das cameras. GET: {mode: dongle/external, eth: a porta Ethernet que o modo externo usaria, ports: as que existem}. POST {"mode": "dongle" / "external", "eth": opcional}: passa de um para o outro (o perfil que sai desce antes de o outro subir; no modo externo o Atom fica com 192.168.4.1 e o DHCP na Ethernet, e o AP externo tem de emitir o mesmo nome e password do ps-control). Recusado a gravar: as cameras e os gateways perdem a rede por momentos. |
 | GET | `/api/net/status` | Wi-Fi picture for the recovery panel. |
 | GET | `/api/net/tailscale` | Estado do Tailscale, que e o caminho de acesso remoto ao Atom. |
 | POST | `/api/net/wifi/connect` | Liga o uplink a uma rede GUARDADA, escolhida pelo operador. |
@@ -186,7 +187,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 
 | Metodo | Caminho | O que faz |
 |---|---|---|
-| POST | `/api/system/led` | {"on": true / false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED. |
+| POST | `/api/system/led` | {"on": true / false}: liga ou apaga o LED do dongle do AP (fica guardado). 404 se nao ha dongle com LED; 409 no modo de AP externo (o dongle nao serve as cameras). |
 | POST | `/api/system/reboot` | Reinicia o Atom (recusado a gravar). |
 | POST | `/api/system/shutdown` | Desliga o Atom (recusado a gravar). |
 | GET | `/api/system/sony_sdk` | O ajudante da Sony (Camera Remote SDK): {available, why, sdk, models, caps, found}. ?scan=1 procura camaras (USB e rede local; a lista chega em found uns segundos depois). |
