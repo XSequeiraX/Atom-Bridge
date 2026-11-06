@@ -2730,16 +2730,6 @@ class Ui:
             x += len(text)
         return x
 
-    def cd_inutil(self):
-        """C e D nao fazem nada na linha seleccionada? A BMPCC liga-se sozinha pelo C3, as GoPro pelo S3,
-        o F6 pelo cabo; nos GATEWAYS liga-se/desliga-se com 1. Ai o rodape nao os mostra."""
-        if self.on_gw is not None or self.on_f6:
-            return True
-        if not self.rows:
-            return False
-        rid = self.rows[min(self.cur, len(self.rows) - 1)]["id"]
-        return tipo_de(rid) in ("bmpcc", "gopro", "bmpcc_extra")
-
     def footer_rows(self, w):
         """Uma linha (duas num ecra estreito) so com as teclas do dia-a-dia, cada uma na cor da sua tarefa. As outras
         (G/N/M, C/D, E, PgUp/PgDn, W, X, F12, Q) estao na ajuda: F1 > Keys."""

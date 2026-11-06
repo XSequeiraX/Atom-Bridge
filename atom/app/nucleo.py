@@ -148,7 +148,7 @@ def _resolve_adapter_uncached(preferred):
     """Return an adapter that actually exists, preferring the configured one.
 
     Adapter numbering is not stable across hardware changes: disabling the
-    Pi's internal Bluetooth promotes the USB dongle from hci1 to hci0, which
+    the internal Bluetooth promotes the USB dongle from hci1 to hci0, which
     would otherwise silently break a hardcoded name. Bonds are unaffected —
     they live under the adapter's MAC, not its index.
 
@@ -1174,7 +1174,7 @@ def jam_clock_stepped():
 def _boot_id():
     """Identificador do arranque actual, ou None se nao der para ler.
 
-    E o que distingue "o relogio saltou" de "o Pi reiniciou". A comparacao com
+    E o que distingue "o relogio saltou" de "o Atom reiniciou". A comparacao com
     o monotonico nao chega: so denuncia o reinicio enquanto o uptime for MENOR
     que o monotonico guardado no jam, e passado esse ponto um reinicio passa a
     parecer um salto de relogio. Visto a serio 2026-09-07 -- jam com mono=508,
@@ -1486,11 +1486,7 @@ def wlan_radio(ttl=30):
     segundos, e passar para 5 GHz aguentou-a cinco minutos seguidos. E uma
     condicao que se quer ver antes de comecar, nao depois de perder uma tomada.
 
-    Le-se o `info` e nao o `link` de proposito: quando a ps-uplink sobe como AP
-    PS_Setup deixa de haver ligacao para o `link` mostrar, e era exactamente
-    assim que um AP de 2,4 GHz no MESMO silicio do Bluetooth passava
-    despercebido -- o pior caso a ficar calado. O `info` da o tipo e o canal
-    nos dois modos.
+    Le-se o `info` e nao o `link`: o `info` da o tipo e o canal mesmo sem ligacao.
     """
     now = time.time()
     if now - _wlan_cache["at"] < ttl:

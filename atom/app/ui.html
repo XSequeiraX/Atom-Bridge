@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <title>Camera Bridge</title>
     <style>
-        /* Tipos de letra servidos pelo proprio Pi, em /fonts. Um @import
+        /* Tipos de letra servidos pelo proprio Atom, em /fonts. Um @import
            externo bloqueia a renderizacao ate resolver, e nada no que se
            desenha pode depender de haver internet. */
         @font-face {
@@ -117,7 +117,7 @@
         /* Sem @import de tipos de letra externos. Um @import bloqueia a
            renderizacao ate resolver, e esta pagina tem de abrir depressa numa
            locacao sem internet -- o telemovel esta no AP das camaras, cuja
-           saida passa pelo uplink do Pi, quando existe. As alternativas do
+           saida passa pelo uplink do Atom, quando existe. As alternativas do
            sistema (SF Mono e -apple-system no iOS) sao boas e locais. */
 
         :root {
@@ -666,7 +666,7 @@
         }
         /* O ui.html muda no disco e um separador ja aberto nunca volta la
            sozinho -- fica a correr o JS que tinha em memoria, por vezes
-           horas depois de a correccao ja estar no Pi. Nunca recarrega
+           horas depois de a correccao ja estar no Atom. Nunca recarrega
            sozinho: um reload a meio de uma tomada e pior do que uma pagina
            velha por mais uns minutos. So avisa, e o operador decide quando. */
         .stale-warn {
@@ -795,8 +795,7 @@
         .wifi-meta { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
         .wifi-empty { font-family: var(--sans); font-size: 12px; color: var(--text-muted); padding: 6px 0; }
         /* Segunda linha de uma etiqueta: diz PARA QUE SERVE o botao sem
-           competir com o nome dele. Nasceu do RESTART WIFI PS_Setup, cuja
-           etiqueta era o dobro das outras e partia a linha em mau sitio. */
+           competir com o nome dele (uma etiqueta longa partia a linha em mau sitio). */
         .btn-sub {
             display: block;
             font-size: 10px;
@@ -1510,9 +1509,7 @@
             <p><b>UPLINK ON 2.4 GHz (amber, main page)</b> The uplink wifi is on the same
                band as Bluetooth and the camera access point. Measured on this rig: with the uplink on 2.4 GHz the
                camera link died every 16 to 45 seconds; moved to 5 GHz it ran for
-               minutes untouched. If it says <b>PS_Setup AP ON 2.4 GHz</b> it is worse
-               still — the setup access point then transmits on that band too.
-               Switch networks, or take the access point down.</p>
+               minutes untouched. Switch the uplink to a 5 GHz network.</p>
 
             <p><b>BACKUP LOGS TO SERVER</b> Sends the shoot log and the event log to
                your own machine over SFTP, plus every archived copy still on the card.
@@ -2307,10 +2304,7 @@
         });
     }
     // === SELECTOR DE REDES ===
-    // So redes JA GUARDADAS. Uma rede nova precisa de palavra-passe, e para
-    // isso existe o AP PS_Setup com o portal -- oferecer aqui um campo de
-    // password seria duplicar mal o que ja funciona la.
-    // Redes novas (com password) juntam-se no menu de arranque do Atom ou na consola.
+    // So redes JA GUARDADAS. Redes novas (com password) juntam-se no menu de arranque do Atom ou na consola.
     function chooseWifi() { toggleWifiPick(); }
     function toggleWifiPick() {
         const b = document.getElementById('wifiPick');
@@ -2406,7 +2400,7 @@
                  cls: d.ltc.stale ? 'stale' : 'ltc'};
         } else if ((eff === 'ntp' || eff === 'phone') && typeof d.sys_secs === 'number') {
             // A hora de parede nao traz frames. Mostrar um contador de frames
-            // seria fingir uma precisao que esta fonte nao da. E o relogio do Pi
+            // seria fingir uma precisao que esta fonte nao da. E o relogio do Atom
             // tanto pode vir do NTP como do iPhone: graus de confianca
             // diferentes, por isso muda a etiqueta e a cor.
             const phone = eff === 'phone';
@@ -2466,8 +2460,8 @@
         }
         const tag = document.getElementById('clkTcTag');
         if (tag) tag.textContent = _clkBase ? _clkBase.tag : (noSrc ? '!' : '');
-        // A data vem dos user bits do LTC (SMPTE 309M). Se discordar da do Pi,
-        // o relogio do Pi esta errado -- escrever o dia errado nos metadados e
+        // A data vem dos user bits do LTC (SMPTE 309M). Se discordar da do Atom,
+        // o relogio do Atom esta errado -- escrever o dia errado nos metadados e
         // o erro que mais custa a desfazer em pos, por isso grita-se.
         const dEl = document.getElementById('clkTcDate');
         if (dEl) {
@@ -2746,8 +2740,8 @@
     // abaixo, que o operador usa a meio de uma tomada.
 
     // === CLAQUETE ===
-    // O som sai do altifalante do telemovel, nao do Pi: e o telemovel que esta
-    // junto as camaras, e a placa do Pi so tem saida de linha. Para alinhar
+    // O som sai do altifalante do telemovel, nao do Atom: e o telemovel que esta
+    // junto as camaras. Para alinhar
     // camaras entre si a latencia nao conta -- todas ouvem o mesmo clique ao
     // mesmo tempo. O unico desvio real e a velocidade do som, ~3ms por metro.
     let _slateCtx = null;
@@ -2995,7 +2989,7 @@
             else alert(action === 'reboot' ? 'Restarting...' : 'Shutting down. You can close this.');
         });
     }
-    // Hand the phone's clock to the Pi continuously. Storing it is harmless;
+    // Hand the phone's clock to the Atom continuously. Storing it is harmless;
     // nothing is applied without the button. At a venue with no internet this
     // is the only correct clock in the building.
     function offerPhoneTime() {
@@ -3012,7 +3006,7 @@
             if (r.ok) { alert('System clock: ' + r.now); return; }
             // O 409 do NTP e um aviso, nao uma porta fechada. O trinco do
             // timesyncd nunca abre depois de ter fechado, por isso sem esta
-            // saida um Pi que sincronizou de manha ficava sem maneira nenhuma
+            // saida um Atom que sincronizou de manha ficava sem maneira nenhuma
             // de aceitar a hora do telemovel a tarde, na locacao, sem rede.
             if (!force && /Force to use the phone/.test(r.error || '')
                 && confirm(r.error + '\n\nForce anyway?')) return adoptPhoneTime(true);
@@ -3257,7 +3251,7 @@
             el.hidden = !d.camera_connected;
         });
 
-        // Pi health
+        // Atom health
         const sb = document.getElementById('sysBadge');
         const t = d.soc_temp_c;
         // The box colour stays about MEMORY; the temperature colours only its
@@ -3321,7 +3315,7 @@
             } else if (d.clock_effective === 'tc-stepped') {
                 // A razao concreta muda o que ha a fazer: um salto do relogio
                 // pede jam novo; sem relogio fiavel depois de um reinicio,
-                // tanto serve acertar o Pi como voltar a jamar.
+                // tanto serve acertar o Atom como voltar a jamar.
                 const why = (d.ltc && d.ltc.invalid_reason) || 'the stored offset is no longer valid';
                 extra = '\n[' + why + ' — press GET LTC]';
             }
@@ -3413,14 +3407,9 @@
             const bad = d.uplink_24ghz === true;
             bw.hidden = !bad;
             if (bad) {
-                // O AP e o caso mais grave dos dois: corre na wlan0, o MESMO
-                // chip que faz Bluetooth. Por isso diz-se o que fazer, e nao
-                // so o que se passa.
-                bw.textContent = d.wlan_mode === 'ap'
-                    ? 'PS_Setup AP ON 2.4 GHz \u00B7 SAME CHIP AS BLUETOOTH \u00B7 turn it off in the panel'
-                    : 'UPLINK ON 2.4 GHz'
-                        + (d.uplink_ssid ? ' \u00B7 ' + d.uplink_ssid : '')
-                        + ' \u00B7 COMPETING WITH BLUETOOTH';
+                bw.textContent = 'UPLINK ON 2.4 GHz'
+                    + (d.uplink_ssid ? ' \u00B7 ' + d.uplink_ssid : '')
+                    + ' \u00B7 COMPETING WITH BLUETOOTH';
             }
         }
 

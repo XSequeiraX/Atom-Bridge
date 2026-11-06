@@ -20,11 +20,11 @@ def api_slate():
     """Regista uma claquete sonora emitida pelo telemovel.
 
     O bip nasce no altifalante do telemovel, nao aqui: e o telemovel que esta
-    junto as camaras, e a placa do Pi so tem saida de linha. Para alinhar
+    junto as camaras. Para alinhar
     camaras umas com as outras a latencia nao conta -- todas ouvem o mesmo
     clique no mesmo instante. O timecode que registamos serve para amarrar esse
     clique ao tempo absoluto, e ai ha uns milissegundos de incerteza entre o
-    relogio do telemovel, o deste Pi e a latencia de audio do iOS.
+    relogio do telemovel, o deste Atom e a latencia de audio do iOS.
     """
     data = _body()
     try:

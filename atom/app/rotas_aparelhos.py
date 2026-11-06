@@ -1149,32 +1149,6 @@ def api_dev_afframe(id):
                               ("positionx", "positiony", "positionwidth", "positionheight")},
                     "frames": frames})
 
-# So caminhos dentro de /contents podem entrar no proxy abaixo -- rel_path
-# vem de um parametro de query do browser, e sem isto seria um proxy aberto
-# para qualquer endpoint CCAPI do corpo (incluindo os de controlo).
-# Prefixo E caracteres: so letras, digitos e _ . - / (os nomes do cartao: /contents/sd/100CANON/IMG_0001.JPG). Um '..',
-# um '%2e', uma barra invertida, um '?' ou um '#' deixavam sair de /contents (o requests normaliza o '..' e chegava-se a
-# /shooting/control/recbutton).
-CONTENT_PATH_RE = re.compile(r"^/ccapi/ver1[01]0/contents/[A-Za-z0-9_./-]*$")
-
-
-def _content_path_ok(rel):
-    """O caminho entra no proxy de /contents? Verifica-se tambem depois de desfazer o %-encoding (ate 3 vezes)."""
-    from urllib.parse import unquote
-    if not isinstance(rel, str):
-        return False
-    visto = rel
-    for _ in range(4):
-        if (not CONTENT_PATH_RE.match(visto) or ".." in visto or "//" in visto or "/./" in visto or "%" in visto
-                or any(ord(ch) < 32 or ord(ch) == 127 for ch in visto)):
-            return False
-        depois = unquote(visto)
-        if depois == visto:
-            return True
-        visto = depois
-    return False
-
-
 @app.route('/api/devices/<id>/setting/<name>', methods=['POST'])
 def api_dev_setting(id, name):
     """[canon] Muda um ajuste simples da Canon (Av, Tv, ISO, modo de obturador, qualidade de video...): {"value": ...}."""

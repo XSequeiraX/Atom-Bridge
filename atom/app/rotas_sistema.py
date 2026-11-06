@@ -61,7 +61,7 @@ def ltc_date_mismatch():
     """A data do gerador difere da do Atom? Devolve (data_ltc, data_pi) ou None.
 
     Discordarem e sinal forte de que o relogio do Atom esta errado -- aconteceu
-    hoje, com o Pi a arrancar sem rede e a estimar a data. Vale a pena dize-lo
+    no Pi de antes, a arrancar sem rede e a estimar a data. Vale a pena dize-lo
     em vez de deixar passar calado.
     """
     e = ltc_epoch_now()
@@ -454,7 +454,6 @@ def api_status():
     _mode, _freq = _em_cache("wlan_radio", 10, wlan_radio)
     d["uplink_freq"] = _freq
     d["uplink_ssid"] = _ssid
-    d["wlan_mode"] = _mode
     # None quando o radio nao diz nada: "nao sei" nao e a mesma coisa que
     # "esta bem", e um aviso que grita sem certeza deixa de ser lido.
     d["uplink_24ghz"] = None if _freq is None else _freq < 3000
@@ -958,8 +957,8 @@ def api_net_wifi_connect():
 
     O nome e validado contra a lista de perfis antes de chegar ao nmcli -- e
     texto vindo do cliente, e a lista de perfis e a unica autoridade sobre o que
-    e legitimo. Redes novas nao entram aqui: precisam de palavra-passe, e para
-    isso existe o AP PS_Setup com o portal.
+    e legitimo. Redes novas nao entram aqui: precisam de palavra-passe, e juntam-se no menu de arranque do Atom ou na
+    consola.
     """
     nome = str(_body().get("name") or "").strip()
     if not nome:
