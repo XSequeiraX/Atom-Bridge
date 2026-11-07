@@ -1371,14 +1371,6 @@
     </style>
 </head>
 <body>
-<!-- Avisos de licenca: uma vez, antes de usar a pagina (o aceite fica no bridge e vale tambem para a consola). -->
-<div id="termosGate" hidden style="position:fixed;inset:0;z-index:9999;background:var(--bg);overflow:auto;padding:max(16px,var(--safe-top)) 16px max(16px,var(--safe-bottom))">
-    <div style="max-width:560px;margin:0 auto">
-        <pre id="termosTexto" style="white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--text);margin:0 0 16px"></pre>
-        <button class="dev-btn" id="termosOk" style="width:100%;padding:14px" onclick="termosAceitar(this)">I ACCEPT</button>
-        <div id="termosErro" class="f6-warn bad" hidden style="margin-top:10px"></div>
-    </div>
-</div>
 
     <!-- Header -->
     <!-- Fault banner. A badge sharing a row with five others is not an alarm;
@@ -1692,6 +1684,7 @@
         </div>
         <button class="sys-btn warn" id="btnApRestart" onclick="netAction('ap_cameras','Restart the camera AP? The Canon bodies will drop.')">RESTART CAMERA WIFI</button>
         <button class="sys-btn warn" onclick="switchApMode()" id="btnApMode">CAMERAS' AP: --</button>
+        <button class="sys-btn warn" onclick="renameEth()" id="btnEthRename" style="display:none">RENAME ETHERNET PORT</button>
         <button class="sys-btn warn" onclick="resetBluetooth()" id="btnResetBt">RESTART BLUETOOTH</button>
         <button class="sys-btn warn" onclick="netAction('restart_nm','Restart NetworkManager? The whole network blinks.')">RESTART NETWORKMANAGER</button>
         <button class="sys-btn warn" onclick="netAction('restart_bridge','Restart the bridge? The BMPCC drops for ~30s.')">RESTART BRIDGE</button>
@@ -2146,6 +2139,17 @@
                 ? 'ch' + escHtml(n.ap_chan || '?') + ' &middot; ' + (quem.join(' &middot; ') || 'no clients')
                 : 'offline'));
         }
+        ethList = n.ethernet || [];
+        for (const e of ethList) {
+            L.push(marca(!!e.link, 'ETHERNET &middot; ' + escHtml(e.iface)));
+            L.push('&nbsp;&nbsp;' + (e.link
+                ? (e.speed ? e.speed + ' Mb/s' : 'up') + (e.ip ? ' &middot; ' + escHtml(e.ip) : '')
+                : 'no cable')
+                + (e.role ? ' &middot; ' + escHtml(e.role) : '')
+                + (e.fixed && e.fixed !== e.iface ? ' &middot; ' + escHtml(e.fixed) + ' after restart' : ''));
+        }
+        const be = document.getElementById('btnEthRename');
+        if (be) be.style.display = ethList.length ? '' : 'none';
         apModo = n.ap_mode || 'dongle'; apEth = n.ap_eth || null;
         const bm = document.getElementById('btnApMode');
         if (bm) {
@@ -2283,7 +2287,24 @@
             el.innerHTML = lines.join('<br>');
         });
     }
-    let apModo = 'dongle', apEth = null;
+    let apModo = 'dongle', apEth = null, ethList = [];
+    // Da um nome fixo a uma porta Ethernet (fica ja e depois de reiniciar). A porta cai uns segundos.
+    function renameEth() {
+        if (!ethList.length) { alert('No Ethernet port found.'); return; }
+        let porta = ethList[0].iface;
+        if (ethList.length > 1) {
+            porta = (prompt('Which port? ' + ethList.map(e => e.iface).join(', '), porta) || '').trim();
+            if (!porta) return;
+            if (!ethList.some(e => e.iface === porta)) { alert('No port called ' + porta + '.'); return; }
+        }
+        const novo = (prompt('New name for ' + porta + ' (1 to 15: letters, digits, _ and -, starting with a letter)', porta) || '').trim();
+        if (!novo || novo === porta) return;
+        if (!confirm('Rename ' + porta + ' to ' + novo + '? The port drops for a few seconds.')) return;
+        api('net/eth/rename', 'POST', {iface: porta, name: novo}).then(r => {
+            if (r && r.error) alert(r.error);
+            else { if (r && r.message) alert(r.message); setTimeout(refreshNet, 3000); }
+        });
+    }
     function switchApMode() {
         const alvo = apModo === 'external' ? 'dongle' : 'external';
         if (alvo === 'external' && !apEth) { alert('No Ethernet port found for the external AP.'); return; }
@@ -4350,37 +4371,6 @@
         try { localStorage.setItem('gpAjustes', abrir ? '1' : '0'); } catch (e) {}
     }
     (function () { let v = false; try { v = localStorage.getItem('gpAjustes') === '1'; } catch (e) {} gpAjustes(v); })();
-    // Os avisos de licenca ainda por aceitar tapam a pagina; aceitar uma vez vale para todas as camaras e para a consola.
-    function termosGate() {
-        getJson('/api/system/terms').then(d => {
-            if (!d || d.accepted !== false) return;
-            // O texto vem com quebras de linha para a consola (66 colunas): aqui juntam-se os paragrafos.
-            const isTitulo = l => /^[A-Z0-9 '(),&.:\/-]+$/.test(l);
-            const out = [];
-            (d.text || []).forEach(l => {
-                const ult = out.length ? out[out.length - 1] : '';
-                const item = /^\s*(\d+\.|-)\s/.test(l);
-                if (!l.trim()) out.push('');
-                else if (ult && !item && !isTitulo(l) && !isTitulo(ult.trim()) && (/^\s/.test(l) === /^\s/.test(ult) || /^\s{4}/.test(l)))
-                    out[out.length - 1] = ult + ' ' + l.trim();
-                else out.push(l);
-            });
-            document.getElementById('termosTexto').textContent = out.join('\n');
-            document.getElementById('termosGate').hidden = false;
-        });
-    }
-    function termosAceitar(btn) {
-        btn.disabled = true;
-        fetch('/api/system/terms', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({accept: true})})
-            .then(r => r.json().catch(() => ({})).then(d => {
-                btn.disabled = false;
-                const e = document.getElementById('termosErro');
-                if (r.ok && d.ok) { document.getElementById('termosGate').hidden = true; e.hidden = true; }
-                else { e.textContent = d.error || 'Could not save the acceptance: try again.'; e.hidden = false; }
-            }))
-            .catch(() => { btn.disabled = false; });
-    }
-    termosGate();
     setInterval(pollDevices, 1000);
     setInterval(pollGateways, 3000);
     pollGateways();

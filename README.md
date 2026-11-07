@@ -242,6 +242,6 @@ SDK da Sony, os tipos de letra, as bibliotecas compiladas no firmware) mantêm a
 da Canon que quem usa o bridge tem de conhecer: ver [`AVISOS-LICENCAS.md`](AVISOS-LICENCAS.md). O Atom Bridge não é
 feito nem suportado pela Sony, Canon, Blackmagic Design, GoPro, Zoom ou Deity.
 
-Os avisos de licença aparecem uma só vez, **antes de a consola carregar** e na primeira visita da página, iguais para
-qualquer câmara (atual ou futura): sem os aceitar, o bridge não se usa. O aceite fica guardado (`termos.json`) até o
-texto mudar.
+Os avisos de licença (de todos os SDK e afins) aceitam-se uma só vez, **na primeira instalação do Atom**: o instalador
+mostra-os e pede o aceite (ou `ACCEPT_LICENSES=yes`), e sem ele a instalação não acaba. Valem para qualquer câmara (atual
+ou futura). Depois nada volta a perguntar: nem a consola, nem a página, nem as atualizações. O aceite fica em `termos.json`.

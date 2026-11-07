@@ -39,7 +39,12 @@ CONSOLA = [
     ("nomes inteiros", "100x40", "normal", [], ["iPhone Cabin", "GoPro 1"], ["iPh ", " GP 1"]),
     # As Canon so gravam em modo video: uma em modo foto aparece como "not video" (nao como "ready") e nao ha nada de fotos.
     ("Canon em modo foto", "100x40", "normal", [], ["not video"], ["PHOTO", "shots"]),
-    ("AP externo na Ethernet", "100x40", "apext", [], ["EXT AP (Ethernet enp3s0)", "CAM-AP"], ["channel 6"]),
+    ("assistente: passo Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9,
+     ["10/18   Sony", "Sony helper: running", "A7 IV", "ILCE-7M4  battery 64%", "card 1h10m"]),
+    ("assistente: TC das Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9 + ["\\r", "!wait:2"],
+     ["timecode set 10:00:00:00", "OK. N: next step"]),
+    ("AP externo na Ethernet", "100x40", "apext", [], ["EXT AP (Ethernet enp3s0)", "CAM-AP", "ETHERNET",
+                                                       "enp3s0 up 1000M (cameras' AP)", "lan2 down"], ["channel 6"]),
     ("ajuda", "100x40", "normal", ["?"], ["HELP", "Keys"]),
     # Issue #35: o nome ou o alias novo aparece logo no menu aberto (antes so depois de sair e voltar a entrar)
     ("alias novo no menu", "100x40", "normal", ["\\d", "\\d", "\\d", "\\r", "6", "\x7f" * 8 + "B-cam", "\\r", "!wait:2"],
@@ -55,9 +60,8 @@ CONSOLA = [
     ("PIN: nao agora", "100x40", "sempin", ["n", "!wait:2"], ["GATEWAYS", "REC  VIA"], ["Set a PIN now?"]),
     ("PIN: define", "100x40", "sempin", ["y", "4821\\r", "4821\\r", "!wait:2"], ["Web PIN set"]),
     ("PIN: ja ha, nao pergunta", "100x40", "normal", [], ["GATEWAYS"], ["No web PIN is set"]),
-    ("avisos de licenca", "100x30", "termos", [], ["LICENSES AND NOTICES"], ["GATEWAYS"]),
-    ("avisos aceites", "100x40", "termos", ["\\r", "y", "!wait:2"], ["GATEWAYS", "REC  VIA"], ["Accept these notices"]),
-    ("avisos recusados", "100x30", "termos", ["\\r", "n", "!wait:2"], ["Accept these notices"], ["GATEWAYS", "REC  VIA"]),
+    # Os avisos de licenca aceitam-se no instalador: a consola nunca os pergunta, mesmo num Atom que nao os aceitou.
+    ("avisos so no instalador", "100x40", "termos", [], ["GATEWAYS", "REC  VIA"], ["LICENSES AND NOTICES", "Accept these notices"]),
 ]
 
 
@@ -378,6 +382,175 @@ def nomes_interfaces():
     return erros
 
 
+def portas_ethernet():
+    """As portas Ethernet: o bridge lista-as (so as fisicas), renomeia-as ja e para sempre (.link pelo caminho do hardware, perfis
+    do NetworkManager e o AP externo atras), recusa nomes maus; o instalador pergunta um nome por porta numa instalacao nova e
+    escreve o MESMO ficheiro .link que o bridge."""
+    import json
+    import pty
+    sys.path.insert(0, os.path.join(RAIZ, "atom", "app"))
+    import ethernet
+    erros = []
+    tmp = tempfile.mkdtemp(prefix="eth-")
+    sysnet, links = os.path.join(tmp, "net"), os.path.join(tmp, "links")
+
+    def interface(nome, tipo="1", device=True, wireless=False, carrier="1", mac="aa:bb:cc:00:00:01"):
+        d = os.path.join(sysnet, nome)
+        os.makedirs(d)
+        for k, v in (("type", tipo), ("carrier", carrier), ("address", mac), ("speed", "1000")):
+            open(os.path.join(d, k), "w").write(v + "\n")
+        if device:
+            os.makedirs(os.path.join(d, "device"))
+        if wireless:
+            os.makedirs(os.path.join(d, "wireless"))
+    interface("enp2s0")
+    interface("enx001122", carrier="0", mac="00:11:22:33:44:55")
+    interface("ps-uplink", wireless=True)
+    interface("docker0", device=False)
+    interface("lo", tipo="772", device=False)
+    ethernet.SYS_NET, ethernet.LINK_DIR = sysnet, links
+    cmds, falha_nome = [], [False]
+
+    def falso(cmd, timeout=20):
+        cmds.append(list(cmd))
+        ok = subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[0] == "udevadm":
+            n = os.path.basename(cmd[-1])
+            return subprocess.CompletedProcess(cmd, 0, "ID_PATH=pci-0000:02:00.0\n" if n == "enp2s0" else "ID_PATH=pci-0000:00:14.0-usb-0:2:1.0\n", "")
+        if cmd[:4] == ["nmcli", "-g", "UUID", "connection"]:
+            return subprocess.CompletedProcess(cmd, 0, "u-fio\nu-ap\n", "")
+        if cmd[:3] == ["nmcli", "-g", "connection.interface-name"]:
+            return subprocess.CompletedProcess(cmd, 0, "enp2s0\n" if cmd[-1] == "u-fio" else "ps-control\n", "")
+        if cmd[:3] == ["ip", "link", "set"] and "name" in cmd:
+            if falha_nome[0]:
+                return subprocess.CompletedProcess(cmd, 2, "", "RTNETLINK answers: Device or resource busy")
+            os.rename(os.path.join(sysnet, cmd[4]), os.path.join(sysnet, cmd[6]))
+        return ok
+    ethernet._correr = falso
+    if ethernet.portas() != ["enp2s0", "enx001122"]:
+        erros.append("portas(): so as Ethernet fisicas (sem Wi-Fi, docker0, lo): %r" % ethernet.portas())
+    est = {e["iface"]: e for e in ethernet.estado(ap_eth="enp2s0")}
+    if est.get("enp2s0", {}).get("role") != "cameras' AP" or est.get("enx001122", {}).get("link") is not False:
+        erros.append("estado(): papel e ligacao mal: %r" % est)
+    apm = os.path.join(tmp, "ap_modo.json")
+    json.dump({"modo": "external", "eth": "enp2s0"}, open(apm, "w"))
+    ok, msg = ethernet.renomear("enp2s0", "cams-eth", ap_modo_path=apm)
+    link = os.path.join(links, "20-bridge-eth-pci-0000-02-00-0.link")
+    if not ok or "is now cams-eth" not in msg:
+        erros.append("renomear devia dar certo: %r %r" % (ok, msg))
+    elif "Path=pci-0000:02:00.0" not in open(link).read() or "Name=cams-eth" not in open(link).read():
+        erros.append("o .link devia casar o caminho e dar o nome: %r" % open(link).read())
+    if ["nmcli", "connection", "modify", "u-fio", "connection.interface-name", "cams-eth"] not in cmds \
+            or any("u-ap" in c and "modify" in c for c in cmds):
+        erros.append("so o perfil preso a porta devia passar ao nome novo: %r" % [c for c in cmds if "modify" in c])
+    ordem = [c[4:] for c in cmds if c[:3] == ["ip", "link", "set"]]
+    if ordem != [["enp2s0", "down"], ["enp2s0", "name", "cams-eth"], ["cams-eth", "up"]]:
+        erros.append("a porta devia descer, mudar de nome e subir: %r" % ordem)
+    if json.load(open(apm)).get("eth") != "cams-eth":
+        erros.append("o AP externo devia seguir o nome novo: %r" % json.load(open(apm)))
+    for atual, novo, quer in (("enp9s9", "x", "not an Ethernet port"), ("cams-eth", "wlan0", "1 to 15"),
+                              ("cams-eth", "nome-muito-comprido", "1 to 15"), ("cams-eth", "ps-uplink", "already an interface")):
+        ok, msg = ethernet.renomear(atual, novo)
+        if ok or quer not in msg:
+            erros.append("renomear(%r, %r) devia recusar com %r: %r" % (atual, novo, quer, msg))
+    falha_nome[0] = True
+    ok, msg = ethernet.renomear("enx001122", "lan2")
+    if not ok or "after a restart" not in msg or "enx001122" not in os.listdir(sysnet):
+        erros.append("porta ocupada: o nome devia ficar para depois de reiniciar: %r %r" % (ok, msg))
+    fixos = {e["iface"]: e.get("fixed") for e in ethernet.estado()}
+    if fixos.get("enx001122") != "lan2":
+        erros.append("estado() devia mostrar o nome que fica depois de reiniciar: %r" % fixos)
+    # o instalador: pergunta numa instalacao nova e escreve o mesmo .link
+    lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+    shutil.rmtree(sysnet)
+    interface("enp2s0")
+    links2 = os.path.join(tmp, "links2")
+    script = ('. "$0"; eth_path() { echo pci-0000:02:00.0; }; UP_NAME=ps-uplink AP_NAME=ps-control; nomes_ethernet 1; '
+              'while read -r a p n; do [ -n "$a" ] && eth_link "$p" "$n"; done <<< "$ETH_NOMES"; echo "FIM"')
+    mestre, escravo = pty.openpty()
+    p = subprocess.Popen(["bash", "-c", script, lib], stdin=escravo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         env=dict(os.environ, SYS_NET_DIR=sysnet, LINK_DIR=links2))
+    os.close(escravo)
+    os.write(mestre, b"ps-control\neth0\ncams-eth\n")
+    try:
+        out, _ = p.communicate(timeout=20)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        out = "TIMEOUT"
+    os.close(mestre)
+    f2 = os.path.join(links2, "20-bridge-eth-pci-0000-02-00-0.link")
+    if "FIM" not in out or "already used" not in out or "not wlanN" not in out or not os.path.exists(f2):
+        erros.append("instalador: devia recusar ps-control e eth0 e escrever o .link: %r" % out[-500:])
+    elif open(f2).read() != open(link).read():
+        erros.append("o instalador e o bridge deviam escrever o mesmo .link: %r vs %r" % (open(f2).read(), open(link).read()))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
+def avisos_instalador():
+    """Os avisos de licenca aceitam-se UMA vez, no instalador: obrigatorios numa instalacao nova (ACCEPT_LICENSES=yes, ou "yes"
+    num terminal; "no" ou sem terminal param), nada numa actualizacao que ja os tem, e um texto novo nao volta a perguntar."""
+    import json
+    import pty
+    erros = []
+    app = os.path.join(RAIZ, "atom", "app")
+    lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+    tmp = tempfile.mkdtemp(prefix="termos-")
+    opt = os.path.join(tmp, "opt")
+    os.makedirs(opt)
+
+    def corre(nova, env=None, entrada=None):
+        cmd = ["bash", "-c", '. "$0"; termos_da_instalacao "$1" "$2" "$3"; rc=$?; termos_instalar "$1"; echo "RES=$rc"',
+               lib, opt, app, str(nova)]
+        e = dict(os.environ, **(env or {}))
+        e.pop("ACCEPT_LICENSES", None) if not (env and "ACCEPT_LICENSES" in env) else None
+        if entrada is None:
+            r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, env=e, timeout=30)
+            out = r.stdout + r.stderr
+        else:
+            mestre, escravo = pty.openpty()
+            p = subprocess.Popen(cmd, stdin=escravo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=e)
+            os.close(escravo)
+            os.write(mestre, entrada.encode())
+            try:
+                out, _ = p.communicate(timeout=30)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                out = "TIMEOUT"
+            os.close(mestre)
+        m = re.search(r"RES=(\d+)", out)
+        return (m.group(1) if m else "?"), out
+    termos = os.path.join(opt, "termos.json")
+    rc, out = corre(1)
+    if rc != "1" or os.path.exists(termos):
+        erros.append("instalacao nova sem terminal nem ACCEPT_LICENSES devia parar: %r %r" % (rc, out[-300:]))
+    rc, out = corre(1, entrada="talvez\nno\n")
+    if rc != "1" or os.path.exists(termos) or "LICENSES AND NOTICES" not in out:
+        erros.append("num terminal devia mostrar os avisos e parar com no: %r %r" % (rc, out[-300:]))
+    rc, out = corre(1, entrada="yes\n")
+    if rc != "0" or not os.path.exists(termos):
+        erros.append("num terminal, yes devia aceitar e guardar: %r %r" % (rc, out[-300:]))
+    os.remove(termos)
+    rc, out = corre(1, env={"ACCEPT_LICENSES": "yes"})
+    if rc != "0" or not os.path.exists(termos):
+        erros.append("ACCEPT_LICENSES=yes devia aceitar sem perguntar: %r %r" % (rc, out[-300:]))
+    # ja aceites: nada se pergunta nem muda, mesmo com um texto de outra versao
+    json.dump({"version": 0, "at": "2026-01-01 00:00:00"}, open(termos, "w"))
+    rc, out = corre(0, entrada="no\n")
+    if rc != "0" or "LICENSES AND NOTICES" in out or json.load(open(termos))["version"] != 0:
+        erros.append("um Atom que ja aceitou nao devia ser perguntado: %r %r" % (rc, out[-300:]))
+    r = subprocess.run([sys.executable, os.path.join(app, "licencas.py"), "tem"], env=dict(os.environ, BRIDGE_TERMOS_PATH=termos))
+    if r.returncode != 0:
+        erros.append("licencas.py tem: um aceite de outra versao do texto devia contar (aceite uma vez)")
+    # actualizacao sem aceite e sem terminal: avisa e segue
+    os.remove(termos)
+    rc, out = corre(0)
+    if rc != "0" or "never accepted" not in out or os.path.exists(termos):
+        erros.append("actualizacao sem aceite e sem terminal devia avisar e seguir: %r %r" % (rc, out[-300:]))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def erros_curtos():
     """Os erros de rede chegam curtos a consola, a pagina e ao registo (issue #34), com as mensagens reais das bibliotecas;
     a copia do bridge-ctl.py da o mesmo que o atom/app/curto.py."""
@@ -634,6 +807,8 @@ if __name__ == "__main__":
                     ("iPhone: obturador com 1 casa decimal", iphone_obturador),
                     ("Erros de rede curtos (#34)", erros_curtos),
                     ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo),
-                    ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces)):
+                    ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces),
+                    ("Portas Ethernet: listar e renomear", portas_ethernet),
+                    ("Avisos de licenca: so no instalador", avisos_instalador)):
         ok = grupo(nome, f()) and ok
     sys.exit(0 if ok else 1)

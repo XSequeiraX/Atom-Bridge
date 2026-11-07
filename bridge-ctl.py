@@ -213,6 +213,7 @@ Time, offset and age of the jam. A yellow date differs from the system.
 # Networks
 INT WI-FI = uplink.
 EXT WI-FI = camera network and its cameras (EXT AP (Ethernet ...) when an external AP serves them).
+ETHERNET = the wired ports: up/down, speed, address, what each serves. Rename: Devices > WIRELESS > Ethernet ports.
 
 # Gateways
 Green online, yellow connecting, red offline, grey off.
@@ -1993,25 +1994,6 @@ class Ui:
             except curses.error:
                 pass
 
-    def termos(self):
-        """Os avisos de licenca, uma so vez e antes de a consola carregar (o aceite fica no bridge, vale para a pagina e
-        para todas as camaras). False se o operador nao aceita: a consola sai. Sem o bridge a responder (ou um mais
-        antigo, sem a rota) nao ha como saber: segue-se, o bridge volta a perguntar quando houver."""
-        s, d = api("GET", "/api/system/terms", timeout=6)
-        if s != 200 or not isinstance(d, dict) or d.get("accepted") is not False:
-            return True
-        texto = [str(l) for l in d.get("text") or []]
-        while True:
-            self.pager("License notices", lambda: texto, live=False, cor=COR["cams"])
-            r = self.ask("Accept these notices to use Atom Bridge? (y = accept, n = quit)", "yn")
-            if r == "y":
-                s, d = api("POST", "/api/system/terms", {"accept": True}, timeout=8)
-                if s == 200:
-                    return True
-                self.say("Could not save the acceptance (HTTP %s): try again" % s, 2)
-            elif r == "n":
-                return False
-
     def say(self, text, level=0):
         self.msg = (text, time.time(), level)
 
@@ -2526,7 +2508,8 @@ class Ui:
         # quando o ecra tem altura de sobra (senao a lista dos devices e que a precisa).
         bt_txt, bt_cor = bt_resumo(st) if ok else ("", "blue")
         bt_vis = ok and bt_cor != "blue"            # o Bluetooth ligado e o normal: so aparece desligado ou desconhecido
-        n_net = 2 + (1 if bt_vis else 0)
+        eths = ((self.net_info() or {}).get("ethernet") or []) if ok else []
+        n_net = 2 + (1 if eths else 0) + (1 if bt_vis else 0)
         n_gw = (1 + len(self.gws)) if self.gws else 0
         # A gravar: uma faixa vermelha a toda a largura por baixo do relogio, para se ver de longe que o take corre.
         faixa = self.faixa_rec(st) if ok else None
@@ -2562,8 +2545,10 @@ class Ui:
                                           (clk.upper() if eff in ("ltc", "ntp") else clk,
                                            self.attr(cor_eff) | curses.A_BOLD)])
             self.draw_ap(y_net + 1, w)
+            if eths:
+                self.draw_eth(eths, y_net + 2, w)
             if bt_vis:
-                self.draw_system(st, y_net + 2)
+                self.draw_system(st, y_net + 2 + (1 if eths else 0))
             self.draw_gws(y_gws, w)
             if st.get("fault"):
                 self.put(y_falha, 1, "FAULT: %s   (X clears it)" % (st.get("fault_reason") or "unknown"),
@@ -2847,6 +2832,29 @@ class Ui:
         if cams:
             segs.append((": " + ", ".join(cams), 0))
         # Os outros aparelhos (gateways, iPads...) estao em Devices > WIRELESS > Settings <AP> > Devices.
+        x = 1
+        for n, (t, a) in enumerate(segs):           # nao passa da largura do ecra
+            if x + len(t) >= w - 1:
+                segs = segs[:n] + [(t[:max(0, w - 2 - x)], a)]
+                break
+            x += len(t)
+        self.put_segs(y, 1, segs)
+
+    def draw_eth(self, eths, y, w):
+        """ETHERNET: uma linha com cada porta (nome, ligada ou nao, velocidade, IP e para que serve: internet ou o AP das
+        cameras). Renomeiam-se em Devices > WIRELESS > Ethernet ports."""
+        segs = [("ETHERNET", self.attr("green" if any(e.get("link") for e in eths) else "dim") | curses.A_BOLD)]
+        for e in eths:
+            if e.get("link"):
+                txt = "  %s up%s%s" % (e["iface"], (" %sM" % e["speed"]) if e.get("speed") else "",
+                                       (" " + e["ip"]) if e.get("ip") else "")
+            else:
+                txt = "  %s down" % e["iface"]
+            if e.get("role"):
+                txt += " (%s)" % e["role"]
+            if e.get("fixed") and e["fixed"] != e["iface"]:
+                txt += " -> %s after restart" % e["fixed"]
+            segs.append((txt, self.attr("green") if e.get("link") else self.attr("dim")))
         x = 1
         for n, (t, a) in enumerate(segs):           # nao passa da largura do ecra
             if x + len(t) >= w - 1:
@@ -3976,6 +3984,8 @@ class Ui:
                 continue
             if k == "nm":
                 self.restart_nm()
+            if k == "eth":
+                self.eth_ports()
                 continue
             if k == "bt":
                 self.bt_menu()
@@ -4926,6 +4936,7 @@ class Ui:
             ("Zoom F6", COR["sys"], self.wz_f6),
             ("DJI Mic 3", COR["time"], self.wz_mic3),
             ("GoPro", COR["cams"], self.wz_gopro),
+            ("Sony", COR["cams"], self.wz_sony),
             ("Camera clocks", COR["time"], self.wz_camclock),
             ("Mobile timecode", COR["time"], self.wz_iphones),
             ("BMPCC settings", COR["cams"], self.wz_bm_settings),
@@ -5433,6 +5444,68 @@ class Ui:
                         state.setdefault("gp_clock", {})[cid] = d.get("offset")
             self.snap.poll_once()
         return L, tudo, ("reset the gateway" if not gw_ok else "check the GoPro clocks"), accao
+
+    def wz_sony(self, state):
+        """As Sony (Camera Remote SDK): o ajudante a correr e os avisos aceites, cada camara ligada e pronta (bateria, cartao,
+        ISO, f, obturador), e o timecode de todas a partir do LTC (Time Code Preset; so com a camara parada)."""
+        sos = sorted(self.devs("sony").items())
+        if not sos:
+            return [("No Sony in this bridge: nothing to set up here.", "dim")], True, None, None
+        info = self._sony_info()
+        L = [("Sony cameras (Camera Remote SDK).", "bold"), ""]
+        if info is None:
+            return L + [("The bridge does not answer about the Sony helper: update it from GitHub.", "red")], False, None, None
+        ajudante = bool(info.get("available"))
+        L.append(("Sony helper: %s" % ("running, SDK %s" % info.get("sdk") if ajudante else "NOT RUNNING"),
+                  "green" if ajudante else "red"))
+        if not ajudante:
+            L.append(("  %s" % (info.get("why") or "?"), "red"))
+        if info.get("terms_accepted") is False:
+            L.append(("License notices not accepted when the Atom was installed: no Sony is added until they are.", "red"))
+            L.append(("  Run the installer in a terminal: sudo bash install_atom.sh", "red"))
+        L.append("")
+        tcs = state.setdefault("sony_tc", {})
+        tudo = ajudante and info.get("terms_accepted") is not False
+        for cid, so in sos:
+            nome = so.get("name") or cid
+            if not so.get("enabled", True):
+                L.append(("%-12s off in the bridge" % nome, "dim"))
+                continue
+            via = "USB %s" % (so.get("serial") or "?") if so.get("via") == "usb" else (so.get("host") or "?")
+            if not so.get("connected"):
+                L.append(("%-12s %-9s %s   NOT CONNECTED%s" % (nome, so.get("model") or "", via,
+                                                            (": " + so["error"]) if so.get("error") else ""), "red"))
+                tudo = False
+                continue
+            bat = ("%s%%" % so["battery"]) if so.get("battery") is not None else "-"
+            resta = so.get("remaining_s")
+            resta = ("%dh%02dm" % (resta // 3600, resta % 3600 // 60)) if isinstance(resta, int) else "-"
+            pronta = so.get("ready", True)
+            L.append(("%-12s %-9s battery %-5s card %-7s ISO %s  f%s  %s%s" % (
+                nome, so.get("model") or "", bat, resta, _ou(so.get("iso")), _ou(so.get("fnumber")), _ou(so.get("shutter")),
+                "" if pronta else "   NOT READY: %s" % (so.get("why") or "?")), "green" if pronta else "yellow"))
+            if not pronta:
+                tudo = False
+            if cid in tcs:
+                L.append(("             timecode %s" % tcs[cid], "green" if tcs[cid].startswith("set") else "red"))
+        L += ["", ("Enter writes the LTC as the Time Code Preset of every connected Sony that is not recording.", "dim")]
+
+        def accao(state):
+            if not ajudante:
+                self.sony_sdk()
+                return
+            for cid, so in sos:
+                if not so.get("connected") or not so.get("enabled", True):
+                    continue
+                if so.get("running"):
+                    state.setdefault("sony_tc", {})[cid] = "not set: recording"
+                    continue
+                s, d = api("POST", "/api/devices/%s/tc" % cid, {}, timeout=20)
+                ok = s == 200 and isinstance(d, dict) and d.get("ok")
+                state.setdefault("sony_tc", {})[cid] = ("set %s" % d.get("tc")) if ok else \
+                    "not set: %s" % ((d or {}).get("error") if isinstance(d, dict) else "no answer")
+            self.snap.poll_once()
+        return L, tudo, ("open the Sony SDK page" if not ajudante else "set the Sony timecode from the LTC"), accao
 
     def wz_iphones(self, state):
         ips = sorted(self.devs("mobile").items())
@@ -6175,6 +6248,8 @@ class Ui:
         if not any(i["iface"] == ap_if for i in ifaces):          # sem o iw (ou o AP em baixo): a do AP das camaras
             ifaces = [{"iface": ap_if, "type": "AP", "ssid": d.get("ap_ssid")}] + ifaces
         out = [("nm", "Restart NetworkManager")]
+        if d.get("ethernet"):
+            out.append(("eth", "Ethernet ports  (%d)" % len(d["ethernet"])))
         for i in ifaces:
             nome = i.get("ssid") or (d.get("ap_ssid") if i["iface"] == ap_if else None) or i["iface"]
             papel = ("cameras' AP" if i["iface"] == ap_if else "access point" if i.get("type") == "AP"
@@ -6298,6 +6373,33 @@ class Ui:
         if not mem:
             L.append(("  nothing", "dim"))
         return L
+
+    def eth_ports(self):
+        """As portas Ethernet: escolher uma e dar-lhe um nome fixo (fica ja e depois de reiniciar)."""
+        while True:
+            eths = self.wifi_net(fresco=True).get("ethernet") or []
+            if not eths:
+                self.say("No Ethernet port found", 1)
+                return
+            textos = []
+            for e in eths:
+                t = "%-15s %-5s %s" % (e["iface"], "up" if e.get("link") else "down", e.get("ip") or "")
+                if e.get("role"):
+                    t += "  (%s)" % e["role"]
+                textos.append(t + "   %s %s" % (e.get("driver") or "", e.get("mac") or ""))
+            i = self.menu("Ethernet ports: Enter renames", textos, cor=COR["net"])
+            if i is None:
+                return
+            e = eths[i]
+            novo = self.prompt("New name for %s (1-15: letters, digits, _ -)" % e["iface"], e["iface"])
+            if novo is None or not novo.strip() or novo.strip() == e["iface"]:
+                continue
+            if not self.confirm("Rename %s to %s? The port drops for a few seconds%s." % (
+                    e["iface"], novo.strip(), " (it serves the cameras)" if e.get("role") == "cameras' AP" else "")):
+                continue
+            s, r = self.call("Rename %s" % e["iface"], "POST", "/api/net/eth/rename", {"iface": e["iface"], "name": novo.strip()})
+            self.cache.drop("net")
+            self.done("Rename %s" % e["iface"], s, r, extra=[r["message"]] if s == 200 and isinstance(r, dict) and r.get("message") else None)
 
     def restart_nm(self):
         if self.confirm("Restart NetworkManager? All the Wi-Fi links (internet and the APs) drop for a few seconds."):
@@ -7662,8 +7764,6 @@ def main(scr):
     threading.Thread(target=snap.run_f6, args=(stop,), daemon=True).start()
     ui = Ui(scr, snap)
     try:
-        if not ui.termos():
-            return None
         ui.pin_arranque()
         return ui.loop()
     finally:

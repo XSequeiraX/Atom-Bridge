@@ -10,6 +10,8 @@
 #   ATOM_USER       o utilizador do Atom (por defeito quem chamou o sudo)
 #   AP_SSID         nome do AP das cameras; se faltar, e pedido
 #   WEB_PIN         PIN da pagina web (4 a 12 digitos); OBRIGATORIO numa instalacao nova: se faltar, e pedido (num terminal)
+#   ACCEPT_LICENSES=yes  aceita os avisos de licenca (todos os SDK e afins) sem perguntar; OBRIGATORIO numa instalacao nova
+#                   (num terminal mostram-se e pede-se "yes"). Aceitam-se uma vez: depois nada volta a perguntar.
 #   AP_PSK          password do AP das cameras; se faltar e o AP nao existir,
 #                   e pedida (tem de ser a que as cameras ja tem guardada)
 #   UP_NAME/AP_NAME nomes das interfaces Wi-Fi (uplink / dongle do AP); numa instalacao nova sao pedidos (Enter: ps-uplink /
@@ -39,14 +41,20 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 id "$ATOM_USER" >/dev/null 2>&1 || die "user '$ATOM_USER' does not exist"
 [ -f "$APP/bridge.py" ] || die "no bridge code in $APP (run the installer from the repository clone)"
 
-# O PIN da pagina e obrigatorio numa instalacao nova: pede-se agora, antes do trabalho demorado (WEB_PIN=... define-o sem perguntar).
+# Os avisos de licenca: uma vez, na primeira instalacao (obrigatorio); depois nada volta a perguntar.
 PRIMEIRA_INSTALACAO=0
 [ -f "$OPT/bridge.py" ] || PRIMEIRA_INSTALACAO=1
+termos_da_instalacao "$OPT" "$APP" "$PRIMEIRA_INSTALACAO" \
+    || die "accept the license notices: run the installer in a terminal, or ACCEPT_LICENSES=yes sudo -E bash install_atom.sh"
+
+# O PIN da pagina e obrigatorio numa instalacao nova: pede-se agora, antes do trabalho demorado (WEB_PIN=... define-o sem perguntar).
 pin_da_pagina "$OPT" "$APP" "$PRIMEIRA_INSTALACAO" \
     || die "set the web PIN: run the installer in a terminal, or WEB_PIN=<4 to 12 digits> sudo -E bash install_atom.sh"
 # Os nomes das interfaces Wi-Fi, tambem antes do trabalho demorado.
 nomes_interfaces "$OPT" "$PRIMEIRA_INSTALACAO" || die "fix the interface names (UP_NAME=... AP_NAME=...)"
 echo "Wi-Fi interface names: uplink $UP_NAME, cameras AP $AP_NAME"
+# As portas Ethernet: numa instalacao nova lista-as e pergunta um nome para cada uma (Enter fica com o actual).
+nomes_ethernet "$PRIMEIRA_INSTALACAO"
 
 # ----------------------------------------------------------------------------
 step "1/7 Packages"
@@ -161,7 +169,7 @@ fi
 python3 "$OPT/gw_usb.py" --fetch-mp 2>&1 | tail -1 || true
 
 # ----------------------------------------------------------------------------
-step "3/7 Wi-Fi interfaces (fixed names: $UP_NAME and $AP_NAME)"
+step "3/7 Network interfaces (fixed names: $UP_NAME and $AP_NAME, and the Ethernet ports)"
 # O AP das cameras e o dongle AR9271 (driver ath9k_htc); o uplink e o outro
 # radio Wi-Fi da maquina. Os nomes que o sistema da sozinho (wlp7s0,
 # wlx90f65217bfd1) vem do barramento e do MAC; ficam nomes fixos com ficheiros
@@ -205,6 +213,12 @@ else
     UP_NAME=""
 fi
 
+# As portas Ethernet com nome novo (perguntado no inicio): .link pelo caminho do hardware; o nome vale depois de reiniciar.
+while read -r ETH_N ETH_P ETH_V; do
+    [ -n "$ETH_N" ] || continue
+    if eth_link "$ETH_P" "$ETH_V"; then NEED_REBOOT=1; fi
+done <<< "$ETH_NOMES"
+
 # O bridge le os nomes das interfaces do ap.conf (AP_IF, UP_IF; escrito no passo 5). Antes um sed trocava-os em todo o
 # bridge.py, e apanhava tambem palavras iguais nos comentarios.
 
@@ -216,6 +230,7 @@ for u in $(nmcli -g UUID connection show 2>/dev/null); do
     to=""
     if [ -n "$AP_IF" ] && [ "$ifn" = "$AP_IF" ] && [ "$AP_IF" != "$AP_NAME" ]; then to="$AP_NAME"; fi
     if [ -n "$UP_IF" ] && [ "$ifn" = "$UP_IF" ] && [ "$UP_IF" != "$UP_NAME" ]; then to="$UP_NAME"; fi
+    [ -n "$to" ] || to="$(printf '%s' "$ETH_NOMES" | awk -v i="$ifn" '$1 == i { print $3; exit }')"
     if [ -n "$to" ]; then
         if nmcli connection modify "$u" connection.interface-name "$to"; then
             echo "NetworkManager: $(nmcli -g connection.id connection show "$u") -> $to"
@@ -438,6 +453,7 @@ CONCLUIDO=1             # daqui em diante este passo trata da reposicao ele prop
 install -m 755 "$HERE/system/bridge-repor-codigo.sh" /usr/local/bin/bridge-repor-codigo.sh
 systemctl daemon-reload
 pin_instalar                                # o PIN da pagina recolhido no inicio, agora que o codigo ja esta em /opt
+termos_instalar                             # o aceite dos avisos de licenca, idem
 # Reiniciar o bridge a meio de uma take corta-a: a actualizacao so foi recusada se ja se gravava ao pedi-la, e o REC
 # pode ter comecado durante o git pull ou o apt. Espera-se pelo STOP (esperar_stop, em lib_app.sh). NO_WAIT_REC=1
 # reinicia na mesma.
@@ -500,7 +516,7 @@ printf "%-18s %s\n" camera-bridge "$(systemctl is-active camera-bridge)" \
                     bridge-boot-menu "$(systemctl is-enabled bridge-boot-menu) (the console starts from the menu)"
 if [ "$NEED_REBOOT" = 1 ]; then
     echo
-    echo "*** RESTART THE ATOM for the new adapter names ($UP_NAME, $AP_NAME)"
+    echo "*** RESTART THE ATOM for the new interface names ($UP_NAME, $AP_NAME and any renamed Ethernet port)"
     echo "*** to take effect:  sudo reboot"
     echo "*** Until then the bridge network panel and the AP may not answer."
 fi

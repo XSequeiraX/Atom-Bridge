@@ -492,7 +492,7 @@ def api_devices_add():
     """Acrescenta um aparelho: {"type": "canon", name, ip, port, https} | {"type": "mobile", name, host, port} |
     {"type": "gopro", mac, model, name, gw} | {"type": "bmpcc", address, alias} | {"type": "bmpcc_extra", name, host} |
     {"type": "sony", name, model, via: "ip" | "usb", host | serial, ssh, user, password}
-    (409 se os avisos de licenca ainda nao foram aceites: GET/POST /api/system/terms).
+    (409 se os avisos de licenca ainda nao foram aceites: aceitam-se no instalador do Atom).
     Devolve o id novo (o da BMPCC e sempre "bmpcc")."""
     b = _body()
     tipo = _tipo_norm(b.get("type"))

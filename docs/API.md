@@ -28,7 +28,7 @@ Gerado por `atom/app/api_check.py --docs` a partir das rotas do bridge (`nucleo.
 | Metodo | Caminho | O que faz |
 |---|---|---|
 | GET | `/api/devices` | Todos os aparelhos do rig: devices (em servico, um item cada com id e type), removed (retirados, para restaurar ou esquecer), order, alias e o bloco bmpcc. ?type= filtra por tipo (canon, mobile (ou iphone), gopro, bmpcc, bmpcc_extra, sony, f6). |
-| POST | `/api/devices` | Acrescenta um aparelho: {"type": "canon", name, ip, port, https} / {"type": "mobile", name, host, port} / {"type": "gopro", mac, model, name, gw} / {"type": "bmpcc", address, alias} / {"type": "bmpcc_extra", name, host} / {"type": "sony", name, model, via: "ip" / "usb", host / serial, ssh, user, password} (409 se os avisos de licenca ainda nao foram aceites: GET/POST /api/system/terms). Devolve o id novo (o da BMPCC e sempre "bmpcc"). |
+| POST | `/api/devices` | Acrescenta um aparelho: {"type": "canon", name, ip, port, https} / {"type": "mobile", name, host, port} / {"type": "gopro", mac, model, name, gw} / {"type": "bmpcc", address, alias} / {"type": "bmpcc_extra", name, host} / {"type": "sony", name, model, via: "ip" / "usb", host / serial, ssh, user, password} (409 se os avisos de licenca ainda nao foram aceites: aceitam-se no instalador do Atom). Devolve o id novo (o da BMPCC e sempre "bmpcc"). |
 | GET | `/api/devices/<id>` | Um aparelho (em servico ou retirado) pelo seu id: {"device": {...}}; 404 se o id nao existe. |
 | POST | `/api/devices/batch` | Uma accao sobre varios aparelhos: {"action": ..., "type": ...}. order {ids: [...]} (ordem no ecra principal); reset {type: canon} (tira as Canon ligadas de um estado preso); settings_polling {type: canon, on: bool} (liga/desliga a leitura de Av/Tv/ISO...); lead {type: gopro, ms: N} (avanco do QR da hora). |
 
@@ -130,6 +130,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 |---|---|---|
 | POST | `/api/net/action` | {"action": "ap_cameras" / "restart_nm" / "restart_bridge"}: reinicia o AP das cameras, o NetworkManager ou o bridge. Recusado a gravar. |
 | GET,POST | `/api/net/ap_mode` | Quem serve a rede das cameras. GET: {mode: dongle/external, eth: a porta Ethernet que o modo externo usaria, ports: as que existem}. POST {"mode": "dongle" / "external", "eth": opcional}: passa de um para o outro (o perfil que sai desce antes de o outro subir; no modo externo o Atom fica com 192.168.4.1 e o DHCP na Ethernet, e o AP externo tem de emitir o mesmo nome e password do ps-control). Recusado a gravar: as cameras e os gateways perdem a rede por momentos. |
+| POST | `/api/net/eth/rename` | {"iface": nome actual, "name": nome novo}: da um nome fixo a uma porta Ethernet (ficheiro .link pelo caminho do hardware) e aplica-o ja; os perfis do NetworkManager e o AP externo seguem o nome novo. A porta cai uns segundos. Recusado a gravar. |
 | GET | `/api/net/status` | Wi-Fi picture for the recovery panel. |
 | GET | `/api/net/tailscale` | Estado do Tailscale, que e o caminho de acesso remoto ao Atom. |
 | POST | `/api/net/wifi/connect` | Liga o uplink a uma rede GUARDADA, escolhida pelo operador. |
@@ -191,8 +192,7 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | POST | `/api/system/reboot` | Reinicia o Atom (recusado a gravar). |
 | POST | `/api/system/shutdown` | Desliga o Atom (recusado a gravar). |
 | GET | `/api/system/sony_sdk` | O ajudante da Sony (Camera Remote SDK): {available, why, sdk, models, caps, found}. ?scan=1 procura camaras (USB e rede local; a lista chega em found uns segundos depois). |
-| GET | `/api/system/terms` | Os avisos de licenca (Sony, Canon, Blackmagic...) e se o operador ja os aceitou: {accepted, version, at, text}. A consola mostra-os antes de arrancar e a pagina na primeira visita: uma vez, nao a cada camara. |
-| POST | `/api/system/terms` | Aceita os avisos de licenca: {"accept": true}. Fica guardado (termos.json) ate o texto mudar. |
+| GET | `/api/system/terms` | Os avisos de licenca (Sony, Canon, Blackmagic...) e se ja foram aceites: {accepted, version, at, text}. So para consulta: aceitam-se uma vez, no instalador, na primeira instalacao do Atom. |
 | GET | `/api/system/update` | Compara o Atom com o repositorio publico: o commit do clone e o instalado, o que ha de novo, se ha alteracoes locais e se uma atualizacao corre. ?log=1 devolve o registo da atualizacao em curso. |
 | POST | `/api/system/update` | Atualiza o Atom a partir do repositorio publico (puxa o codigo e corre o instalador). Recusado a gravar. {"then_gateways": [...]} grava a seguir o firmware dos gateways. |
 

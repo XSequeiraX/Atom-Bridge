@@ -3,7 +3,7 @@
 O SDK e uma biblioteca C++ fechada, com licenca propria (sony/AVISO-SONY.md): o repositorio leva so o nosso ajudante ja
 compilado (sony/sony_ctl, de sony/sony_ctl.cpp) com as bibliotecas da Sony de que ele precisa ao lado, como a licenca
 deixa distribuir; os headers e o resto do SDK nao. Os termos da Sony aceitam-se uma vez, com os outros avisos de licenca
-(licencas.py), antes de usar a consola ou a pagina: so se acrescenta uma camara com eles aceites (termos_ok).
+(licencas.py), na instalacao do Atom: so se acrescenta uma camara com eles aceites (termos_ok).
 
 Este modulo arranca o ajudante e fala com ele por linhas (comandos no stdin, eventos JSON no stdout). Cada camara e um
 alvo de REC com id proprio (sony1, sony2...) e a mesma interface das outras frotas (bmcam, gopro): ready, running, alvo,
@@ -65,7 +65,7 @@ MODELOS = {
     "DSC-RX0M2": {"usb": True, "lan": False, "wifi": False, "ssh": False},     # firmware 3.00 ou mais
 }
 
-TERMOS_FALTA = "accept the license notices first (they show when the console starts and on the web page)"
+TERMOS_FALTA = "the license notices were not accepted when the Atom was installed: run the installer in a terminal (sudo bash install_atom.sh)"
 
 # O nome comercial, para a consola e a pagina mostrarem "A7 IV" ao lado de "ILCE-7M4".
 NOMES = {

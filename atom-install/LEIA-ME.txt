@@ -8,6 +8,7 @@ Conteudo
 Uso (no Atom, com o repositorio clonado)
   sudo bash atom-install/install_atom.sh                     aplica so o que falta
   AP_SSID='...' AP_PSK='...' sudo -E bash atom-install/install_atom.sh ...   evita as perguntas do AP
+  ACCEPT_LICENSES=yes ...   aceita os avisos de licenca sem os mostrar (so na primeira instalacao; depois nada pergunta)
   Mais simples: bash atualizar_atom.sh (git pull + instalar), ou na consola GLOBAL SETTINGS > Update from GitHub.
   O Atom actualiza-se do repositorio publico (https://github.com/XSequeiraX/Atom-Bridge), sem autenticacao.
   Os pacotes (apt, pip) so se revem quando a seccao dos pacotes do instalador muda ou falta alguma peca: um update
@@ -32,6 +33,10 @@ Nomes dos adaptadores Wi-Fi (fixos, por ficheiros .link em /etc/systemd/network)
   Numa instalacao nova o instalador pergunta os dois nomes (Enter fica com estes); numa
   actualizacao ficam os que estao no ap.conf. Sem perguntas: sudo UP_NAME=... AP_NAME=...
   bash install_atom.sh. Depois de os mudar e preciso reiniciar o Atom (o script avisa).
+  Portas Ethernet: numa instalacao nova o instalador lista-as e pergunta um nome para
+  cada uma (Enter fica com o actual). Depois de instalado: consola, Devices > WIRELESS >
+  Ethernet ports, ou o botao RENAME ETHERNET PORT da pagina (fica logo e depois de
+  reiniciar; ficheiros /etc/systemd/network/20-bridge-eth-*.link).
 
 AP das cameras sem internet
   O AP (ps-control) nao partilha a internet do uplink: o NetworkManager continua em "shared" (DHCP, reservas das

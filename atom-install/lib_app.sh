@@ -88,6 +88,107 @@ nomes_interfaces() {
     return 0
 }
 
+# As portas Ethernet (fisicas: com dispositivo, tipo 1, sem Wi-Fi) e o nome fixo de cada uma. Numa instalacao nova num terminal
+# lista-as e pergunta um nome por porta (Enter fica com o actual). O resultado fica em ETH_NOMES, uma linha "actual caminho novo"
+# por porta a renomear; o passo 3 escreve os .link (20-bridge-eth-<caminho>.link, os mesmos que o bridge escreve ao renomear
+# depois de instalado: atom/app/ethernet.py). Numa actualizacao nada se pergunta: os .link que ja la estao ficam.
+eth_path() { udevadm info -q property -p "${SYS_NET_DIR:-/sys/class/net}/$1" 2>/dev/null | sed -n 's/^ID_PATH=//p' | head -n1; }
+eth_portas() {
+    local d
+    for d in "${SYS_NET_DIR:-/sys/class/net}"/*; do
+        [ -e "$d/device" ] && [ ! -d "$d/wireless" ] && [ "$(cat "$d/type" 2>/dev/null)" = 1 ] && echo "${d##*/}"
+    done
+    return 0
+}
+nomes_ethernet() {
+    local nova="${1:-0}" n path v usados lista d estado
+    ETH_NOMES=""
+    [ "$nova" = 1 ] && [ -t 0 ] || return 0
+    lista="$(eth_portas)"
+    [ -n "$lista" ] || { echo "no Ethernet port found"; return 0; }
+    echo "Ethernet ports:"
+    for n in $lista; do
+        d="${SYS_NET_DIR:-/sys/class/net}/$n"
+        estado=down; [ "$(cat "$d/carrier" 2>/dev/null)" = 1 ] && estado=up
+        echo "  $n   $estado   $(basename "$(readlink -f "$d/device/driver" 2>/dev/null)")   $(cat "$d/address" 2>/dev/null)"
+    done
+    usados=" ${UP_NAME:-} ${AP_NAME:-} $(echo $lista) "
+    for n in $lista; do
+        path="$(eth_path "$n")"
+        if [ -z "$path" ]; then echo "  $n: no hardware path, it keeps its name"; continue; fi
+        while :; do
+            read -rp "Name for the Ethernet port $n [$n]: " v
+            v="${v:-$n}"
+            [ "$v" = "$n" ] && break
+            if ! nome_iface_ok "$v"; then echo "  1 to 15 characters: letters, digits, _ and -, starting with a letter (not wlanN/ethN)"; continue; fi
+            case "$usados" in *" $v "*) echo "  $v is already used by another interface"; continue ;; esac
+            ETH_NOMES="${ETH_NOMES}$n $path $v
+"
+            usados="$usados$v "
+            break
+        done
+    done
+    return 0
+}
+# O .link de uma porta Ethernet: caminho, nome. Escreve so se mudou; devolve 0 se escreveu.
+eth_link() {
+    local dir="${LINK_DIR:-/etc/systemd/network}" f novo
+    f="$dir/20-bridge-eth-$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').link"
+    novo="$(printf '# Escrito pelo Camera Bridge: nome fixo da porta Ethernet (pelo caminho do hardware).\n[Match]\nPath=%s\nType=ether\n\n[Link]\nName=%s' "$1" "$2")"
+    [ "$(cat "$f" 2>/dev/null)" = "$novo" ] && return 1
+    mkdir -p "$dir"
+    printf '%s\n' "$novo" > "$f"
+    echo "written $f ($2)"
+    return 0
+}
+
+# Os avisos de licenca (de todos os SDK e afins: licencas.py) aceitam-se UMA vez, na primeira instalacao, e depois nada volta a
+# perguntar (nem a consola, nem a pagina, nem as actualizacoes). Numa instalacao nova sao obrigatorios: ACCEPT_LICENSES=yes aceita
+# sem perguntar; num terminal mostram-se e pede-se "yes"; sem terminal nem ACCEPT_LICENSES a instalacao PARA (return 1). Uma
+# actualizacao de um Atom que ja os aceitou nao faz nada; uma sem aceite (de antes disto) pergunta num terminal e, sem ele, avisa
+# e segue (as Sony ficam por acrescentar ate se aceitar). Como o PIN, o aceite fica num ficheiro temporario ($TERMOS_NOVO) e o
+# passo 7 poe-no em $opt (termos_instalar).
+termos_da_instalacao() {
+    local opt="${1:-$OPT}" app="${2:-$opt}" nova="${3:-0}" tmp r
+    TERMOS_NOVO=""
+    [ -s "$opt/termos.json" ] && return 0
+    [ -f "$app/licencas.py" ] || return 0
+    tmp="$(mktemp -u /tmp/bridge-termos.XXXXXX)"
+    if [ "${ACCEPT_LICENSES:-}" = yes ]; then
+        BRIDGE_TERMOS_PATH="$tmp" python3 "$app/licencas.py" aceitar >/dev/null && TERMOS_NOVO="$tmp"
+        echo "license notices accepted (ACCEPT_LICENSES=yes)"
+        return 0
+    fi
+    if [ -t 0 ]; then
+        echo
+        python3 "$app/licencas.py" texto
+        echo
+        while :; do
+            read -rp "Type yes to accept these notices (no = stop the installation): " r
+            case "$r" in
+                yes|YES|Yes) BRIDGE_TERMOS_PATH="$tmp" python3 "$app/licencas.py" aceitar >/dev/null && TERMOS_NOVO="$tmp"; return 0 ;;
+                no|NO|No) echo "ERROR: the license notices were not accepted." >&2; return 1 ;;
+            esac
+        done
+    fi
+    if [ "$nova" = 1 ]; then
+        echo "ERROR: the license notices must be accepted on a new install." >&2
+        return 1
+    fi
+    echo "NOTE: the license notices were never accepted on this Atom: no Sony can be added until they are. Run the installer in a terminal (or with ACCEPT_LICENSES=yes)."
+    return 0
+}
+
+# Poe o aceite recolhido por termos_da_instalacao no sitio final (depois de o codigo estar em $opt).
+termos_instalar() {
+    local opt="${1:-$OPT}"
+    [ -n "${TERMOS_NOVO:-}" ] && [ -f "$TERMOS_NOVO" ] || return 0
+    [ -s "$opt/termos.json" ] || install -m 644 "$TERMOS_NOVO" "$opt/termos.json"
+    rm -f "$TERMOS_NOVO"
+    TERMOS_NOVO=""
+    echo "license notices: acceptance saved in $opt/termos.json"
+}
+
 # Poe o PIN recolhido por pin_da_pagina no sitio final (depois de o codigo estar em $opt).
 pin_instalar() {
     local opt="${1:-$OPT}"

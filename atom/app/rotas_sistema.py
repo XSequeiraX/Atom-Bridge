@@ -4,6 +4,7 @@ Parte do bridge (o arranque e o estado partilhado estao em nucleo.py). As rotas 
 importar o modulo, no fim do nucleo."""
 import ap_modo
 import claquete
+import ethernet
 import json
 import licencas
 import os
@@ -776,7 +777,11 @@ def api_net_status():
            "ap_chan": None, "ap_clients": None, "ap_cams": [], "ap_others": None,
            "ap_up": False, "ap_ssid": None, "ap_devices": [], "ap_known": [], "wifi_ifaces": [], "ap_iface": AP_IFACE,
            "uplink_ip": None, "ap_mode": ap_modo.modo(), "ap_eth": ap_modo.eth_iface(),
-           "services": {}}
+           "services": {}, "ethernet": []}
+    try:
+        out["ethernet"] = ethernet.estado(ap_modo.iface_ap(AP_IFACE) if ap_modo.externo() else None)
+    except Exception:
+        pass
     try:
         # The uplink address, which is the one worth showing: it changes with
         # every DHCP lease at every new venue, and it is what you type into a
@@ -1074,6 +1079,25 @@ def api_net_ap_mode():
     return jsonify({"ok": True, "mode": ap_modo.modo(), "message": msg})
 
 
+@app.route('/api/net/eth/rename', methods=['POST'])
+def api_net_eth_rename():
+    """{\"iface\": nome actual, \"name\": nome novo}: da um nome fixo a uma porta Ethernet (ficheiro .link pelo caminho do hardware) e
+    aplica-o ja; os perfis do NetworkManager e o AP externo seguem o nome novo. A porta cai uns segundos. Recusado a gravar."""
+    corpo = _body()
+    atual, novo = str(corpo.get("iface") or "").strip(), str(corpo.get("name") or "").strip()
+    if not atual or not novo:
+        return jsonify({"error": "iface and name are required"}), 400
+    if anything_recording():
+        return jsonify({"error": "Recording — not touching the network now"}), 409
+    ok, msg = ethernet.renomear(atual, novo, ap_modo_path=ap_modo.CAMINHO)
+    log_event("Ethernet %s -> %s: %s" % (atual, novo, msg))
+    if not ok:
+        return jsonify({"error": msg}), 400
+    if ap_modo.externo():
+        _run(["systemctl", "try-restart", "bridge-ap-nonat"], timeout=15)     # a regra "sem partilha" segue o nome da porta
+    return jsonify({"ok": True, "message": msg})
+
+
 @app.route('/api/bluetooth/reset', methods=['POST'])
 def api_reset_bluetooth():
     """Restart bluetoothd, then bring the BLE devices back.
@@ -1208,19 +1232,9 @@ def _update_a_correr():
 
 @app.route('/api/system/terms', methods=['GET'])
 def api_system_terms_get():
-    """Os avisos de licenca (Sony, Canon, Blackmagic...) e se o operador ja os aceitou: {accepted, version, at, text}. A
-    consola mostra-os antes de arrancar e a pagina na primeira visita: uma vez, nao a cada camara."""
+    """Os avisos de licenca (Sony, Canon, Blackmagic...) e se ja foram aceites: {accepted, version, at, text}. So para consulta:
+    aceitam-se uma vez, no instalador, na primeira instalacao do Atom."""
     return jsonify(dict(licencas.estado(), ok=True, text=licencas.TEXTO))
-
-
-@app.route('/api/system/terms', methods=['POST'])
-def api_system_terms_post():
-    """Aceita os avisos de licenca: {"accept": true}. Fica guardado (termos.json) ate o texto mudar."""
-    if _body().get("accept") is not True:
-        return jsonify({"ok": False, "error": "send {\"accept\": true} to accept the license notices"}), 400
-    d = licencas.aceitar()
-    log_event("License notices accepted by the operator")
-    return jsonify({"ok": True, "accepted": True, "version": d["version"], "at": d["at"]})
 
 
 @app.route('/api/system/update', methods=['GET'])

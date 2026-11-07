@@ -1,7 +1,7 @@
 """Simulador da consola: corre o bridge-ctl.py num pseudo-terminal contra um bridge falso e devolve o ecra (pyte).
 
 Uso directo:  python3 ci/consola_sim.py 100x40 [cenario] [teclas...]
-  cenarios: termos (avisos de licenca por aceitar) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet)
+  cenarios: termos (avisos de licenca por aceitar: a consola nao os pergunta) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet)
   teclas: texto literal, ou \\e=ESC, \\r=Enter, \\d=seta baixo, \\u=seta cima; !wait:N espera N s; !clear fecha a take
 Do ci/verificar.py: correr(cols, linhas, cenario, teclas) -> [linhas do ecra]. Nada fica fora de uma pasta temporaria.
 """
@@ -71,7 +71,9 @@ def scen(c):
         st["uplink_ssid"] = ""
         st["clock_effective"] = "unset"; st["clock_sources"] = {}
     if c == "apext":                                    # o AP das cameras e um AP externo na porta Ethernet
-        net.update({"ap_mode": "external", "ap_iface": "enp3s0", "ap_chan": None})
+        net.update({"ap_mode": "external", "ap_iface": "enp3s0", "ap_chan": None,
+                    "ethernet": [{"iface": "enp3s0", "link": True, "speed": 1000, "ip": None, "role": "cameras' AP"},
+                                 {"iface": "lan2", "link": False, "speed": None, "ip": None, "role": None}]})
     if c == "fim":
         gravando = (time.time() - T0[0]) < 4
         st["is_recording"] = gravando
@@ -114,6 +116,9 @@ class H(http.server.BaseHTTPRequestHandler):
             elif body.get("name"):
                 MUDOU["name"][m.group(1)] = body["name"]
             return self._send(200, {"ok": True})
+        m = re.match(r"^/api/devices/(sony\d+)/tc$", p)
+        if m and self.command == "POST":                    # Time Code Preset da Sony a partir do LTC
+            return self._send(200, {"ok": True, "tc": "10:00:00:00"})
         if p == "/api/security/pin":
             if self.command == "POST":
                 n = int(self.headers.get("Content-Length") or 0)
