@@ -29,8 +29,9 @@ O que faz
 Nomes dos adaptadores Wi-Fi (fixos, por ficheiros .link em /etc/systemd/network)
   ps-uplink    Wi-Fi interno, liga a rede do local (reconhecido pelo caminho PCI)
   ps-control   dongle AR9271 do AP das cameras, perfil do AP (pelo driver)
-  Outros nomes: sudo UP_NAME=... AP_NAME=... bash install_atom.sh. Depois de os
-  mudar e preciso reiniciar o Atom (o script avisa).
+  Numa instalacao nova o instalador pergunta os dois nomes (Enter fica com estes); numa
+  actualizacao ficam os que estao no ap.conf. Sem perguntas: sudo UP_NAME=... AP_NAME=...
+  bash install_atom.sh. Depois de os mudar e preciso reiniciar o Atom (o script avisa).
 
 AP das cameras sem internet
   O AP (ps-control) nao partilha a internet do uplink: o NetworkManager continua em "shared" (DHCP, reservas das

@@ -39,6 +39,7 @@ CONSOLA = [
     ("nomes inteiros", "100x40", "normal", [], ["iPhone Cabin", "GoPro 1"], ["iPh ", " GP 1"]),
     # As Canon so gravam em modo video: uma em modo foto aparece como "not video" (nao como "ready") e nao ha nada de fotos.
     ("Canon em modo foto", "100x40", "normal", [], ["not video"], ["PHOTO", "shots"]),
+    ("AP externo na Ethernet", "100x40", "apext", [], ["EXT AP (Ethernet enp3s0)", "CAM-AP"], ["channel 6"]),
     ("ajuda", "100x40", "normal", ["?"], ["HELP", "Keys"]),
     # Issue #35: o nome ou o alias novo aparece logo no menu aberto (antes so depois de sair e voltar a entrar)
     ("alias novo no menu", "100x40", "normal", ["\\d", "\\d", "\\d", "\\r", "6", "\x7f" * 8 + "B-cam", "\\r", "!wait:2"],
@@ -321,6 +322,62 @@ def ap_externo():
     return erros
 
 
+def nomes_interfaces():
+    """O instalador pede os nomes das interfaces Wi-Fi numa instalacao nova (Enter fica com ps-uplink / ps-control), recusa os
+    invalidos e repetidos, e numa actualizacao fica com os do ap.conf sem perguntar."""
+    import pty
+    erros = []
+    lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+    tmp = tempfile.mkdtemp(prefix="ifnomes-")
+
+    def corre(nova, env=None, entrada=None):
+        cmd = ['bash', '-c', '. "$0"; nomes_interfaces "$1" "$2"; rc=$?; echo "RES=$rc|$UP_NAME|$AP_NAME"', lib, tmp, str(nova)]
+        e = dict(os.environ, **(env or {}))
+        e.pop("UP_NAME", None) if not (env and "UP_NAME" in env) else None
+        e.pop("AP_NAME", None) if not (env and "AP_NAME" in env) else None
+        if entrada is None:
+            r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, env=e, timeout=20)
+            out = r.stdout + r.stderr
+        else:
+            mestre, escravo = pty.openpty()
+            p = subprocess.Popen(cmd, stdin=escravo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=e)
+            os.close(escravo)
+            os.write(mestre, entrada.encode())
+            try:
+                out, _ = p.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                out = "TIMEOUT"
+            os.close(mestre)
+        m = re.search(r"RES=(\d+)\|([^|]*)\|(\S*)", out)
+        return (m.groups() if m else ("?", "?", "?")), out
+
+    conf = os.path.join(tmp, "ap.conf")
+    # instalacao nova num terminal: Enter no primeiro, um invalido e um repetido no segundo, depois um bom
+    (rc, up, ap), out = corre(1, entrada="\nwlan0\nps-uplink\ncamap\n")
+    if (rc, up, ap) != ("0", "ps-uplink", "camap"):
+        erros.append("instalacao nova com perguntas: %r %r" % ((rc, up, ap), out[-400:]))
+    elif "not wlanN" not in out or "different from the uplink" not in out:
+        erros.append("devia explicar porque recusa wlan0 e o repetido: %r" % out[-400:])
+    # sem terminal: os de sempre, sem perguntar
+    (rc, up, ap), out = corre(1)
+    if (rc, up, ap) != ("0", "ps-uplink", "ps-control") or "Name for" in out:
+        erros.append("sem terminal devia ficar com ps-uplink/ps-control sem perguntar: %r" % ((rc, up, ap),))
+    # do ambiente
+    if corre(1, env={"UP_NAME": "net-in", "AP_NAME": "cams"})[0] != ("0", "net-in", "cams"):
+        erros.append("UP_NAME/AP_NAME do ambiente deviam valer")
+    for mau in ({"UP_NAME": "wlan0"}, {"AP_NAME": "nome-com-mais-de-15"}, {"UP_NAME": "x y"}, {"UP_NAME": "a", "AP_NAME": "a"}):
+        if corre(1, env=mau)[0][0] == "0":
+            erros.append("devia recusar %r" % mau)
+    # actualizacao: os do ap.conf, sem perguntar mesmo num terminal
+    open(conf, "w").write("AP_CON=Rig\nAP_IF=meu-ap\nUP_IF=minha-net\n")
+    (rc, up, ap), out = corre(0, entrada="\n\n")
+    if (rc, up, ap) != ("0", "minha-net", "meu-ap") or "Name for" in out:
+        erros.append("actualizacao devia ficar com os do ap.conf sem perguntar: %r %r" % ((rc, up, ap), out[-300:]))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def erros_curtos():
     """Os erros de rede chegam curtos a consola, a pagina e ao registo (issue #34), com as mensagens reais das bibliotecas;
     a copia do bridge-ctl.py da o mesmo que o atom/app/curto.py."""
@@ -576,6 +633,7 @@ if __name__ == "__main__":
                     ("Sony com o simulador do ajudante", sony), ("Sony no Windows: conversor de texto e vista Linux", sony_windows), ("PIN da pagina ao arrancar e no instalador", pin_arranque), ("Instalador: copia com um programa a correr", instalador),
                     ("iPhone: obturador com 1 casa decimal", iphone_obturador),
                     ("Erros de rede curtos (#34)", erros_curtos),
-                    ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo)):
+                    ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo),
+                    ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces)):
         ok = grupo(nome, f()) and ok
     sys.exit(0 if ok else 1)

@@ -12,6 +12,8 @@
 #   WEB_PIN         PIN da pagina web (4 a 12 digitos); OBRIGATORIO numa instalacao nova: se faltar, e pedido (num terminal)
 #   AP_PSK          password do AP das cameras; se faltar e o AP nao existir,
 #                   e pedida (tem de ser a que as cameras ja tem guardada)
+#   UP_NAME/AP_NAME nomes das interfaces Wi-Fi (uplink / dongle do AP); numa instalacao nova sao pedidos (Enter: ps-uplink /
+#                   ps-control); numa actualizacao ficam os do ap.conf
 #
 # De fora, de proposito: a regra udev que desliga a Ethernet (cortava o SSH) e
 # os scripts de Wi-Fi do Pi (ps-wifi-fallback, ps-portal, ps-ap-channel).
@@ -21,11 +23,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OPT=/opt/camera-bridge
 ATOM_USER="${ATOM_USER:-${KIOSK_USER:-${SUDO_USER:-sequeira}}}"
 PORT=8080
-# Nomes fixos dos dois radios Wi-Fi (ate 15 caracteres; evitar wlanN, e nao
-# usar o nome de um perfil do NetworkManager: a troca de nome no bridge.py e
-# global e apanharia tambem o perfil).
-UP_NAME="${UP_NAME:-ps-uplink}"
-AP_NAME="${AP_NAME:-ps-control}"
+# Nomes fixos dos dois radios Wi-Fi: pedidos numa instalacao nova, logo a seguir ao PIN (nomes_interfaces em lib_app.sh).
+UP_NAME="${UP_NAME:-}"
+AP_NAME="${AP_NAME:-}"
 # O codigo do bridge vive no repositorio (atom/app) e o instalador copia-o, com copia de seguranca e reposicao
 # automatica se o bridge novo nao arrancar (lib_app.sh). (O modo antigo, a partir de um .tar.gz com patches por cima,
 # saiu a 2026-10-14 com os patches e a pasta deployed/: levava ainda codigo do FIZ e do WR-03, que ja nao existem.)
@@ -44,6 +44,9 @@ PRIMEIRA_INSTALACAO=0
 [ -f "$OPT/bridge.py" ] || PRIMEIRA_INSTALACAO=1
 pin_da_pagina "$OPT" "$APP" "$PRIMEIRA_INSTALACAO" \
     || die "set the web PIN: run the installer in a terminal, or WEB_PIN=<4 to 12 digits> sudo -E bash install_atom.sh"
+# Os nomes das interfaces Wi-Fi, tambem antes do trabalho demorado.
+nomes_interfaces "$OPT" "$PRIMEIRA_INSTALACAO" || die "fix the interface names (UP_NAME=... AP_NAME=...)"
+echo "Wi-Fi interface names: uplink $UP_NAME, cameras AP $AP_NAME"
 
 # ----------------------------------------------------------------------------
 step "1/7 Packages"

@@ -212,7 +212,7 @@ Time, offset and age of the jam. A yellow date differs from the system.
 
 # Networks
 INT WI-FI = uplink.
-EXT WI-FI = camera network and its cameras.
+EXT WI-FI = camera network and its cameras (EXT AP (Ethernet ...) when an external AP serves them).
 
 # Gateways
 Green online, yellow connecting, red offline, grey off.
@@ -2832,12 +2832,16 @@ class Ui:
             self.put_segs(y, 1, [("EXT WI-FI: reading ...", self.attr("dim"))])
             return
         nome = d.get("ap_ssid") or self.ap_ssid_usb() or "-"
+        # No modo AP externo quem serve as cameras e a porta Ethernet (o AirPort ou outro AP em modo bridge): sem canal.
+        externo = d.get("ap_mode") == "external"
+        rotulo = "EXT AP (Ethernet %s)" % (d.get("ap_iface") or "?") if externo else "EXT WI-FI"
         if not d.get("ap_up"):
-            self.put_segs(y, 1, [("EXT WI-FI", self.attr("red") | curses.A_BOLD), ("  %s  offline" % nome, self.attr("red"))])
+            self.put_segs(y, 1, [(rotulo, self.attr("red") | curses.A_BOLD),
+                                 ("  %s  %s" % (nome, "offline (cable?)" if externo else "offline"), self.attr("red"))])
             return
         cams = d.get("ap_cams") or []
-        segs = [("EXT WI-FI", self.attr("green") | curses.A_BOLD),
-                ("  %s  channel %s   " % (nome, d.get("ap_chan") or "-"), 0),
+        segs = [(rotulo, self.attr("green") | curses.A_BOLD),
+                ("  %s   " % nome if externo else "  %s  channel %s   " % (nome, d.get("ap_chan") or "-"), 0),
                 ("%d camera%s" % (len(cams), "" if len(cams) == 1 else "s"),
                  self.attr("green") if cams else self.attr("yellow"))]
         if cams:

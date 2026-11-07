@@ -1,7 +1,7 @@
 """Simulador da consola: corre o bridge-ctl.py num pseudo-terminal contra um bridge falso e devolve o ecra (pyte).
 
 Uso directo:  python3 ci/consola_sim.py 100x40 [cenario] [teclas...]
-  cenarios: termos (avisos de licenca por aceitar) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take)
+  cenarios: termos (avisos de licenca por aceitar) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet)
   teclas: texto literal, ou \\e=ESC, \\r=Enter, \\d=seta baixo, \\u=seta cima; !wait:N espera N s; !clear fecha a take
 Do ci/verificar.py: correr(cols, linhas, cenario, teclas) -> [linhas do ecra]. Nada fica fora de uma pasta temporaria.
 """
@@ -70,6 +70,8 @@ def scen(c):
         net["ap_up"] = False
         st["uplink_ssid"] = ""
         st["clock_effective"] = "unset"; st["clock_sources"] = {}
+    if c == "apext":                                    # o AP das cameras e um AP externo na porta Ethernet
+        net.update({"ap_mode": "external", "ap_iface": "enp3s0", "ap_chan": None})
     if c == "fim":
         gravando = (time.time() - T0[0]) < 4
         st["is_recording"] = gravando
