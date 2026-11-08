@@ -31,7 +31,7 @@ REC: se ALGUMA camara alvo estiver a gravar, R para tudo; parar nunca pede
 confirmacao (e a mesma regra do botao REC da pagina).
 
 Dados velhos: se o /api/status (ou o /api/devices) nao chega ha mais de ~6 s, a
-coluna STATE mostra "?" e os valores antigos aparecem apagados (nunca um REC velho
+coluna STATE mostra "stale" e os valores antigos aparecem apagados (nunca um REC velho
 como se fosse actual).
 
 Bloqueio: Win+L (no teclado do Atom, a consola a correr como root) ou F12 tapam a consola; so o PIN da pagina (GLOBAL
@@ -193,8 +193,8 @@ HELP_PAGES = (
     ("Reading the dashboard", lambda: help_lines("""
 # State
 ready, REC, connecting, reading..., offline.
-"?" in STATE: no fresh data (older than ~6 s). Values go dim and the
-  last state shows as "? was REC".
+"stale" in STATE: no fresh data (older than ~6 s). Values go dim and the
+  last state shows as "stale REC".
 Name colour: green connected, yellow connecting, red offline.
 
 # Rows
@@ -212,7 +212,7 @@ Time, offset and age of the jam. A yellow date differs from the system.
 
 # Networks
 INT WI-FI = uplink.
-EXT WI-FI = camera network and its cameras (EXT AP (Ethernet ...) when an external AP serves them).
+EXT WI-FI = camera network and its cameras (EXT AP when an external AP on Ethernet serves them).
 ETHERNET = the wired ports: up/down, speed, address, what each serves. Rename: Devices > WIRELESS > Ethernet ports.
 
 # Gateways
@@ -459,7 +459,7 @@ def bt_resumo(st):
     O estado da BMPCC e da linha dela, nao daqui."""
     ad, bloq = bt_info()
     if ad is None:
-        return "Bluetooth ?", "dim"
+        return "Bluetooth: not known yet", "blue"       # azul = o normal: nao ocupa a linha do dashboard
     if not ad or bloq:
         return "Bluetooth: off", "red"
     return "Bluetooth: on", "blue"
@@ -772,13 +772,13 @@ def carga_txt(st):
     if pct is None:
         ld = _num(st.get("load1"))
         pct = None if ld is None else round(ld / (os.cpu_count() or 1) * 100)
-    return "?" if pct is None else "%d%%" % pct
+    return "-" if pct is None else "%d%%" % pct
 
 
 def ram_txt(st):
     """A RAM em uso em percentagem (o bridge manda mem_percent: usada = total - disponivel)."""
     pct = _num(st.get("mem_percent"))
-    return "?" if pct is None else "%d%%" % pct
+    return "-" if pct is None else "%d%%" % pct
 
 
 def nao_canon(rid):
@@ -1070,7 +1070,7 @@ def fmt_left(v):
 
 def fmt_age(v):
     if v is None:
-        return "?"
+        return "-"
     v = int(v)
     if v >= 3600:
         return "%dh%02dm" % (v // 3600, v % 3600 // 60)
@@ -1169,7 +1169,7 @@ def gateways(st, dv=None):
     out = []
     c3 = st.get("c3_gateway")
     if isinstance(c3, dict):
-        est, h = c3.get("state") or "offline", c3.get("host") or "?"
+        est, h = c3.get("state") or "offline", c3.get("host") or "-"
         if est == "off":
             det = "off"
         elif est == "offline":
@@ -1177,7 +1177,7 @@ def gateways(st, dv=None):
         elif c3.get("mode") != "bridge":
             det = "%s  standalone" % h
         elif est == "connecting":
-            det = "%s  BMPCC %s" % (h, c3.get("phase") or "?")
+            det = "%s  BMPCC %s" % (h, c3.get("phase") or "-")
         else:
             det = "%s  BMPCC ready%s" % (h, "  REC" if c3.get("recording") else "")
         if st.get("bmpcc_via") == "bluez" and est != "off":
@@ -2597,7 +2597,7 @@ class Ui:
             # definicoes, com a camara ja ligada e a aceitar REC: nesse caso
             # esta ligada, a ler (nao "a ligar").
             if velho:                                 # sem dados frescos: nunca um REC velho como se fosse actual
-                state, sa = "?" + (" was REC" if r["rec"] else ""), self.attr("dim")
+                state, sa = "stale" + (" REC" if r["rec"] else ""), self.attr("dim")
             elif r.get("pending"):                    # a GoPro demora ~1 s a confirmar o comando
                 state, sa = r["pending"] + "...", self.attr("yellow") | curses.A_BOLD
             elif r["rec"]:
@@ -2765,8 +2765,6 @@ class Ui:
             if pisca and int(time.time() * 2) % 2:
                 at |= curses.A_REVERSE                  # liga e desliga a 1 Hz (o ecra redesenha 4x/s)
             partes.append((txt, at))
-        else:
-            partes.append(("power ?", self.attr("dim")))
         tc = st.get("soc_temp_c")
         if tc is not None:
             partes.append(("CPU %sC" % tc, self.attr("red") if tc > 80 else self.attr("yellow") if tc > 65 else 0))
@@ -2819,7 +2817,7 @@ class Ui:
         nome = d.get("ap_ssid") or self.ap_ssid_usb() or "-"
         # No modo AP externo quem serve as cameras e a porta Ethernet (o AirPort ou outro AP em modo bridge): sem canal.
         externo = d.get("ap_mode") == "external"
-        rotulo = "EXT AP (Ethernet %s)" % (d.get("ap_iface") or "?") if externo else "EXT WI-FI"
+        rotulo = "EXT AP" if externo else "EXT WI-FI"
         if not d.get("ap_up"):
             self.put_segs(y, 1, [(rotulo, self.attr("red") | curses.A_BOLD),
                                  ("  %s  %s" % (nome, "offline (cable?)" if externo else "offline"), self.attr("red"))])
@@ -2906,11 +2904,11 @@ class Ui:
             em_f6 = g.get("mode") in ("f6", "f6solo")
             if g["on"]:
                 # O selector do S3, como o modo do C3: o botao diz o que faz.
-                acao = "Mode  (now: %s)" % {"f6": "F6 with the Atom", "gopro": "GoPro"}.get(g.get("mode"), "?")
+                acao = "Mode  (now: %s)" % {"f6": "F6 with the Atom", "gopro": "GoPro"}.get(g.get("mode"), "-")
                 itens += [(acao, lambda: self.gw_s3_modo(g), cc)]
                 if not em_f6:
                     itens += [("Add GoPro", lambda: self.gopro_add(n), cc), ("QR lead", self.gopro_lead, COR["time"])]
-            raros += [("LED type  (now: %s)" % (g.get("led_type") or "?"), lambda: self.gw_s3_led(g), cc)]
+            raros += [("LED type  (now: %s)" % (g.get("led_type") or "-"), lambda: self.gw_s3_led(g), cc)]
             if g["on"] and not em_f6:
                 raros += [("Reset", lambda: self.gopro_reset_menu(n), COR["rec"])]
             raros += [("Firmware", lambda: self.gw_firmware(g), cc),
@@ -3032,7 +3030,7 @@ class Ui:
             b = d.get("bin")
             novo = [1] if b else []
             acao = "Update with the Atom's firmware  (%d KB)" % (b["size"] // 1024) if b else "Update  (no firmware on the Atom)"
-        i = self.menu("%s   %s%s" % (nome, d.get("fw") or "?", "   (on trial)" if d.get("trial") else ""),
+        i = self.menu("%s   %s%s" % (nome, d.get("fw") or "-", "   (on trial)" if d.get("trial") else ""),
                       [("Update from GitHub  (the latest)", COR["rec"]), (acao, COR["cams"]),
                        ("Back to the previous firmware", COR["rec"])], cor=COR["cams"])
         if i is None:
@@ -3118,7 +3116,7 @@ class Ui:
             return
         if len(portas) > 1:
             j = self.menu("Which USB port?", ["%s  %s" % (p["port"], "(Espressif)" if p.get("espressif") else
-                                                          "%s:%s" % (p.get("vid") or "?", p.get("pid") or "?")) for p in portas],
+                                                          "%s:%s" % (p.get("vid") or "-", p.get("pid") or "-")) for p in portas],
                           cor=COR["cams"])
             if j is None:
                 return
@@ -3173,10 +3171,10 @@ class Ui:
                 L += ["", ("Working ... do not unplug the gateway", "yellow")]
             elif res:
                 if res.get("ok"):
-                    L += ["", ("DONE: %s on %s" % ((res.get("kind") or "?").upper(), res.get("port")), "green"),
+                    L += ["", ("DONE: %s on %s" % ((res.get("kind") or "-").upper(), res.get("port")), "green"),
                           (res.get("note") or "", "yellow" if res.get("wifi_warning") else "green"), "", ("q: back", "dim")]
                 else:
-                    L += ["", ("FAILED: %s" % (res.get("error") or "?"), "red"), "", ("q: back", "dim")]
+                    L += ["", ("FAILED: %s" % (res.get("error") or "-"), "red"), "", ("q: back", "dim")]
             return L or ["starting ..."]
         self.pager("Gateway by USB", linhas, cor=COR["cams"], every=1.0, seguir=True)
         self.snap.poll_once()
@@ -3222,7 +3220,7 @@ class Ui:
             return
         if len(portas) > 1:
             j = self.menu("Which USB port?", ["%s  %s" % (p["port"], "(Espressif)" if p.get("espressif") else
-                                                          "%s:%s" % (p.get("vid") or "?", p.get("pid") or "?")) for p in portas],
+                                                          "%s:%s" % (p.get("vid") or "-", p.get("pid") or "-")) for p in portas],
                           cor=COR["cams"])
             if j is None:
                 return
@@ -3265,7 +3263,7 @@ class Ui:
             elif res and res.get("ok"):
                 L += ["", ("DONE: M5StickS3 on %s" % res.get("port"), "green"), (res.get("note") or "", "green"), "", ("q: back", "dim")]
             elif res:
-                L += ["", ("FAILED: %s" % (res.get("error") or "?"), "red"),
+                L += ["", ("FAILED: %s" % (res.get("error") or "-"), "red"),
                       ("Hold its side reset button about 2 s until the green LED blinks, then try again.", "yellow"), "", ("q: back", "dim")]
             return L or ["starting ..."]
         self.pager(titulo, linhas, cor=COR["cams"], every=1.0, seguir=True)
@@ -3331,7 +3329,7 @@ class Ui:
 
         def mac(m):
             return ":".join(m[i:i + 2] for i in range(0, 12, 2)).upper()
-        i = self.menu("Camera for the C3", ["%-24s %s %5s dBm%s" % ((f.get("name") or "?")[:24], mac(f["mac"]),
+        i = self.menu("Camera for the C3", ["%-24s %s %5s dBm%s" % ((f.get("name") or "-")[:24], mac(f["mac"]),
                                                                     f.get("rssi"), "  BM" if f.get("bm") else "")
                                             for f in found], cor=COR["cams"])
         if i is None:
@@ -3545,7 +3543,7 @@ class Ui:
                                      (extra, "red" if "CLIP" in extra else "dim")]))
             modo = frc.get("knob_mode")
             if modo or frc.get("output"):
-                L.append(("Knobs on %s   output %s" % ((modo or "?").upper(), frc.get("output") or "?"), "dim"))
+                L.append(("Knobs on %s   output %s" % ((modo or "-").upper(), frc.get("output") or "-"), "dim"))
         L.append("")
         if f6.get("jamming"):
             L.append(("Timecode: JAM %s" % (f6.get("tc") or "-"), "yellow"))
@@ -3663,7 +3661,7 @@ class Ui:
 
         def opera(corpo, depois=None):
             s, r = self.call("F6 card", "POST", "/api/devices/f6/card/op", corpo, timeout=60)
-            self.say(r.get("message") or r.get("error") or "?", 0 if s == 200 and r.get("ok") else 2)
+            self.say(r.get("message") or r.get("error") or "-", 0 if s == 200 and r.get("ok") else 2)
             return depois
 
         d, erro = ler(path)
@@ -3756,7 +3754,7 @@ class Ui:
                     s_, r_ = self.call("F6 card", "POST", "/api/devices/f6/card/play", {"path": junta(alvo["name"])},
                                        timeout=30)
                     self.say(("playing %s" % alvo["name"]) if s_ == 200 and r_.get("ok")
-                             else (r_.get("error") or "?"), 0 if s_ == 200 and r_.get("ok") else 2)
+                             else (r_.get("error") or "-"), 0 if s_ == 200 and r_.get("ok") else 2)
                 else:
                     self.say("P plays a .WAV file: select one", 1)
                 pl_at = 0.0
@@ -4296,7 +4294,7 @@ class Ui:
             self.say("Update the bridge from GitHub first", 2)
             return
         if not info.get("available") and not self.confirm(
-                "The Sony helper is not running:\n%s\n\nAdd the camera anyway?" % (info.get("why") or "?")):
+                "The Sony helper is not running:\n%s\n\nAdd the camera anyway?" % (info.get("why") or "-")):
             return
         i = self.menu("Sony: connect how?", [
             ("Wi-Fi  (camera joins the Atom camera Wi-Fi, no gateway)", COR["cams"]),
@@ -4362,12 +4360,12 @@ class Ui:
             L = [("Sony helper: %s" % ("running, SDK %s" % info.get("sdk") if info.get("available")
                                         else "NOT RUNNING"), "green" if info.get("available") else "red")]
             if not info.get("available"):
-                L += [("  %s" % (info.get("why") or "?"), "red"), "",
+                L += [("  %s" % (info.get("why") or "-"), "red"), "",
                       "The helper comes with the bridge: update it from GitHub."]
             L += ["", "Models the SDK knows: %d" % len(info.get("models") or []), "", ("Cameras found:", "bold")]
             achadas = info.get("found") or []
             for c in achadas:
-                L.append("  %-12s %-8s %s%s" % (c.get("model") or "?", c.get("connection") or "",
+                L.append("  %-12s %-8s %s%s" % (c.get("model") or "-", c.get("connection") or "",
                                                 c.get("ip") or c.get("serial") or "", "  SSH" if c.get("ssh") else ""))
             if not achadas:
                 L.append(("  none (yet): USB cameras and the ones on this network", "dim"))
@@ -4447,7 +4445,7 @@ class Ui:
         if j is None:
             return
         c = canons[j]
-        if self.confirm("Remove %s (%s) from the bridge?\n\nIt stays in the saved list." % (c["name"], c.get("ip") or "?")):
+        if self.confirm("Remove %s (%s) from the bridge?\n\nIt stays in the saved list." % (c["name"], c.get("ip") or "-")):
             s, d = self.call("Remove Canon", "POST", "/api/devices/%s/remove" % c["id"])
             self.done("Remove Canon", s, d)
 
@@ -4592,7 +4590,7 @@ class Ui:
         i = self.menu("BMPCC connection   now: %s" % ("Atom Bluetooth (plan B)" if agora == "bluez" else "C3 gateway"),
                       [("C3 gateway  (normal)%s" % ("   <" if agora == "c3" else ""), COR["cams"]),
                        ("Atom Bluetooth  (plan B: %s)%s" % (
-                           st.get("bmpcc_address") or "?", "   <" if agora == "bluez" else ""), COR["rec"]),
+                           st.get("bmpcc_address") or "-", "   <" if agora == "bluez" else ""), COR["rec"]),
                        ("Pair another BMPCC to the Atom Bluetooth ...", COR["cams"])], cor=COR["cams"])
         if i is None:
             return
@@ -4607,7 +4605,7 @@ class Ui:
             return
         if via == "bluez" and not self.confirm(
                 "Use the Atom Bluetooth for the BMPCC %s?\n\nThe C3 stops being used. The camera must be "
-                "paired to the Atom already." % (st.get("bmpcc_address") or "?")):
+                "paired to the Atom already." % (st.get("bmpcc_address") or "-")):
             return
         s, d = self.call("BMPCC path", "POST", "/api/devices/bmpcc/path", {"via": via})
         self.done("BMPCC through the %s" % ("Atom Bluetooth" if via == "bluez" else "C3 gateway"), s, d)
@@ -4698,7 +4696,7 @@ class Ui:
         verbo = "Arm / disarm" if tipo == "target" else "REC / STOP only"
         if alvo.startswith("slot:"):
             n = int(alvo[5:]) if alvo[5:].isdigit() else 0
-            nome = slots[n - 1] if 1 <= n <= len(slots) else "?"
+            nome = slots[n - 1] if 1 <= n <= len(slots) else "-"
             return "%s slot %d  %s" % (verbo, n, nome)
         return "%s %s" % (verbo, (nomes or {}).get(alvo) or alvo)
 
@@ -4720,7 +4718,7 @@ class Ui:
                 return
             linhas = []
             for x in devs:
-                classes = "/".join(c.upper() for c in x["classes"]) or "?"
+                classes = "/".join(c.upper() for c in x["classes"]) or "-"
                 if not x["present"]:
                     extra = "not plugged in"
                 elif x["map"]:
@@ -5339,7 +5337,7 @@ class Ui:
              "3. On the F6: FRC-8 > connect with the USB cable UNPLUGGED, then plug the",
              "   cable into the bridge. REC/STOP then go to the F6 and it confirms them.",
              "",
-             ("FRC-8 link: %s" % ("connected" if pronto else "NOT READY: %s" % (f6.get("why") or "?")),
+             ("FRC-8 link: %s" % ("connected" if pronto else "NOT READY: %s" % (f6.get("why") or "-")),
               "green" if pronto else "red")]
 
         def accao(state):
@@ -5459,7 +5457,7 @@ class Ui:
         L.append(("Sony helper: %s" % ("running, SDK %s" % info.get("sdk") if ajudante else "NOT RUNNING"),
                   "green" if ajudante else "red"))
         if not ajudante:
-            L.append(("  %s" % (info.get("why") or "?"), "red"))
+            L.append(("  %s" % (info.get("why") or "-"), "red"))
         if info.get("terms_accepted") is False:
             L.append(("License notices not accepted when the Atom was installed: no Sony is added until they are.", "red"))
             L.append(("  Run the installer in a terminal: sudo bash install_atom.sh", "red"))
@@ -5471,7 +5469,7 @@ class Ui:
             if not so.get("enabled", True):
                 L.append(("%-12s off in the bridge" % nome, "dim"))
                 continue
-            via = "USB %s" % (so.get("serial") or "?") if so.get("via") == "usb" else (so.get("host") or "?")
+            via = "USB %s" % (so.get("serial") or "-") if so.get("via") == "usb" else (so.get("host") or "-")
             if not so.get("connected"):
                 L.append(("%-12s %-9s %s   NOT CONNECTED%s" % (nome, so.get("model") or "", via,
                                                             (": " + so["error"]) if so.get("error") else ""), "red"))
@@ -5483,7 +5481,7 @@ class Ui:
             pronta = so.get("ready", True)
             L.append(("%-12s %-9s battery %-5s card %-7s ISO %s  f%s  %s%s" % (
                 nome, so.get("model") or "", bat, resta, _ou(so.get("iso")), _ou(so.get("fnumber")), _ou(so.get("shutter")),
-                "" if pronta else "   NOT READY: %s" % (so.get("why") or "?")), "green" if pronta else "yellow"))
+                "" if pronta else "   NOT READY: %s" % (so.get("why") or "-")), "green" if pronta else "yellow"))
             if not pronta:
                 tudo = False
             if cid in tcs:
@@ -5610,7 +5608,7 @@ class Ui:
                       "green" if row["conn"] else "red"))
             L.append("MAC %s" % (gp.get("mac") or "-"))
             if not row["conn"]:
-                L.append(("  %s" % (gp.get("error") or gp.get("why") or "?"), "red"))
+                L.append(("  %s" % (gp.get("error") or gp.get("why") or "-"), "red"))
                 return L
             L.append("Recording: %s" % ("YES" if gp.get("running") else "no"))
             L.append("Battery %s%%   video left %s" % (gp.get("battery") if gp.get("battery") is not None else "-",
@@ -5622,7 +5620,7 @@ class Ui:
                                                           "connected" if row["conn"] else "NOT CONNECTED"),
                       "green" if row["conn"] else "red"))
             if not row["conn"]:
-                L.append(("  %s" % (bm.get("why") or bm.get("error") or "?"), "red"))
+                L.append(("  %s" % (bm.get("why") or bm.get("error") or "-"), "red"))
                 return L
             L.append("Recording: %s   timecode %s" % ("YES" if bm.get("running") else "no", bm.get("timecode") or "-"))
             L.append("Battery %s%%" % (bm.get("battery") if bm.get("battery") is not None else "-"))
@@ -5632,12 +5630,12 @@ class Ui:
             via = "USB %s" % (so.get("serial") or "-") if so.get("via") == "usb" else "Wi-Fi %s%s" % (
                 so.get("host") or "-", "  SSH" if so.get("ssh") else "")
             L.append(("%s (Sony %s, %s)  %s" % (so.get("name") or row["id"], (so.get("caps") or {}).get("label") or
-                                                so.get("model") or "?", via,
+                                                so.get("model") or "-", via,
                                                 "connected" if row["conn"] else "NOT CONNECTED"),
                       "green" if row["conn"] else "red"))
             L.append("Model %s   %s" % (so.get("model") or "-", "enabled" if so.get("enabled", True) else "DISABLED"))
             if not row["conn"]:
-                L.append(("  %s" % (so.get("why") or so.get("error") or "?"), "red"))
+                L.append(("  %s" % (so.get("why") or so.get("error") or "-"), "red"))
                 return L
             L.append(("Recording: %s" % ("YES" if so.get("running") else "no") +
                       ("   RECORDING FAILED (camera)" if so.get("rec_failed") else ""),
@@ -5660,7 +5658,7 @@ class Ui:
                                                    "enabled" if ip.get("enabled") else "DISABLED",
                                                    "websocket" if ip.get("websocket") else "polling"))
             if not row["conn"]:
-                L.append(("  %s" % (ip.get("why") or ip.get("error") or "?"), "red"))
+                L.append(("  %s" % (ip.get("why") or ip.get("error") or "-"), "red"))
                 return L
             L.append("%s  app %s" % (ip.get("product") or "-", ip.get("app_version") or "-"))
             L.append("Recording: %s   clip %s" % ("YES" if ip.get("running") else "no", ip.get("clip") or "-"))
@@ -5878,7 +5876,7 @@ class Ui:
 
     def info_segs(self, st, velho_st=False, velho_cn=False):
         """A info da linha seleccionada, numa linha: [(texto, cor)]. Muda com o cursor, sem Enter.
-        Com dados velhos (velho_st: /api/status; velho_cn: as Canon) o estado e "?" e o resto vai apagado."""
+        Com dados velhos (velho_st: /api/status; velho_cn: as Canon) o estado e "stale" e o resto vai apagado."""
         if self.on_gw is not None and self.on_gw < len(self.gws):
             g = self.gws[self.on_gw]
             return [("%s %s" % (g["name"], g["what"]), "bold"), ("  " + g["detail"], GW_COR[g["state"]])]
@@ -5888,7 +5886,7 @@ class Ui:
             arm = [str(a) for a in (frc.get("armed") or [])]
             cor = "green" if frc.get("connected") else "red"
             return [("ZOOM F6", "bold"), ("  " + ("REC" if frc.get("recording") else "online" if frc.get("connected") else "offline"), cor),
-                    ("  tracks %s" % ("?" if frc.get("armed") is None else " ".join(arm) if arm else "none armed"),
+                    ("  tracks %s" % ("-" if frc.get("armed") is None else " ".join(arm) if arm else "none armed"),
                      "yellow" if not arm else ""),
                     ("  TC %s" % ("jam" if f6.get("jamming") else "ok" if f6.get("last_jam") else "not jammed"), "")]
         if not self.rows:
@@ -5897,7 +5895,7 @@ class Ui:
         velho = velho_da_linha(r["id"], velho_st, velho_cn)
         est, cor = self.estado_txt(r)
         if velho:
-            est, cor = "?  no fresh data" + ("  (was REC)" if r["rec"] else ""), "dim"
+            est, cor = "no fresh data" + ("  (was REC)" if r["rec"] else ""), "dim"
         batt = ("%d%%" % r["batt"]) if isinstance(r["batt"], (int, float)) and r["batt"] >= 0 else None
         partes = [(r["label"], "bold"), ("  " + est, cor)]
         if r.get("via"):
@@ -6064,7 +6062,7 @@ class Ui:
         else:
             L.append("LTC: nothing stored")
         if st.get("ntp_age") is not None:
-            L.append("NTP: synced %s ago via %s" % (fmt_age(st.get("ntp_age")), st.get("ntp_via") or "?"))
+            L.append("NTP: synced %s ago via %s" % (fmt_age(st.get("ntp_age")), st.get("ntp_via") or "-"))
         else:
             L.append("NTP: not synced.")
         L.append("System clock: %s" % time.strftime("%A %Y-%m-%d %H:%M:%S"))
@@ -6253,7 +6251,7 @@ class Ui:
         for i in ifaces:
             nome = i.get("ssid") or (d.get("ap_ssid") if i["iface"] == ap_if else None) or i["iface"]
             papel = ("cameras' AP" if i["iface"] == ap_if else "access point" if i.get("type") == "AP"
-                     else "internet" if i.get("type") == "managed" else (i.get("type") or "?"))
+                     else "internet" if i.get("type") == "managed" else (i.get("type") or "-"))
             out.append((("wifi", i["iface"]), "Settings %s  (%s)" % (nome, papel)))
         return out
 
@@ -6317,7 +6315,7 @@ class Ui:
         st = self.st()
         ap_if = d.get("ap_iface") or "ps-control"
         info = next((i for i in d.get("wifi_ifaces") or [] if i["iface"] == iface), {"iface": iface})
-        L = [("Interface %s   %s" % (iface, info.get("type") or "?"), "bold")]
+        L = [("Interface %s   %s" % (iface, info.get("type") or "-"), "bold")]
         if iface == ap_if:
             if d.get("ap_mode") == "external":
                 L.append(("  external AP on the cable   %s" % ("UP" if d.get("ap_up") else "DOWN (cable?)"),
@@ -6492,7 +6490,7 @@ class Ui:
                 (x["name"], "bold"), "",
                 "Type:      %s" % x["kind"],
                 "ID:        %s:%s" % (x["vid"], x["pid"]),
-                "USB port:  %s   speed %s Mb/s" % (x["port"], x["speed"] or "?"),
+                "USB port:  %s   speed %s Mb/s" % (x["port"], x["speed"] or "-"),
                 "Drivers:   %s" % (", ".join(x["drivers"]) or "none"),
                 "Uses:      %s" % (", ".join(x["extra"]) or "-")], live=False, cor=COR["cams"])
 
@@ -6503,7 +6501,7 @@ class Ui:
         txt, cor = bt_resumo(st)
         L = [(txt, cor), ""]
         g = next((x for x in gateways(st) if x["id"] == "c3"), None)
-        L.append(("BMPCC via C3 (%s)" % (g["state"] if g else "?"), "dim"))
+        L.append(("BMPCC via C3 (%s)" % (g["state"] if g else "-"), "dim"))
         L.append("")
         ad = self.cache.get("bt", 10, lambda: (200, {"out": self.bt_adapters()}))
         L.append(("Bluetooth adapters", "bold"))
@@ -6566,7 +6564,7 @@ class Ui:
                     top = sel - view + 1
                 self.scr.erase()
                 self.put(0, 1, "SHOOT LOG   %d of %s entries, newest first%s" % (
-                    len(rows), total if total is not None else "?", "   (reading ...)" if r is None else ""),
+                    len(rows), total if total is not None else "-", "   (reading ...)" if r is None else ""),
                     self.attr("bold"))
                 if err:
                     self.put(1, 1, "shoot log: %s" % err, self.attr("red"))
@@ -6833,12 +6831,12 @@ class Ui:
         try:
             data = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.stat(eu).st_mtime))
         except OSError:
-            data = "?"
+            data = "-"
         L = []
         if isinstance(v, dict) and v.get("commit"):
             L += [("Installed: %s" % v["commit"], "bold"),
                   "  %s" % (v.get("subject") or ""),
-                  "  commit date %s   installed %s" % ((v.get("date") or "?")[:16].replace("T", " "), v.get("installed") or "?")]
+                  "  commit date %s   installed %s" % ((v.get("date") or "-")[:16].replace("T", " "), v.get("installed") or "-")]
         else:
             L += [("Installed: unknown", "yellow"),
                   "  (recorded from the next Update from GitHub)"]
@@ -6992,7 +6990,7 @@ class Ui:
                 return
             nomes = sorted(d.get("profiles") or {})
             itens = [("Save the current rig as a profile ...", COR["sys"])] + [
-                ("%s   (saved %s)" % (n, (d["profiles"][n] or {}).get("saved") or "?"), COR["cams"]) for n in nomes]
+                ("%s   (saved %s)" % (n, (d["profiles"][n] or {}).get("saved") or "-"), COR["cams"]) for n in nomes]
             i = self.menu("RIG PROFILES", itens, cor=COR["sys"])
             if i is None:
                 return
@@ -7022,7 +7020,7 @@ class Ui:
                     "C3 gateway: %s" % ("on" if p.get("c3_enabled", True) else "off"),
                     "S3 gateways: %s" % (", ".join("S3 %s %s" % (k, "on" if v else "off")
                                                    for k, v in sorted((p.get("s3_enabled") or {}).items())) or "-"),
-                    "", ("Saved %s" % (p.get("saved") or "?"), "dim")], live=False, cor=COR["sys"])
+                    "", ("Saved %s" % (p.get("saved") or "-"), "dim")], live=False, cor=COR["sys"])
             elif j == 2 and self.confirm("Delete the profile %s?" % nome):
                 s2, r2 = self.call("Profile", "POST", "/api/profiles", {"delete": nome})
                 self.done("Profile deleted", s2, r2)
@@ -7104,6 +7102,47 @@ class Ui:
         s, r = self.call("Web PIN", "POST", "/api/security/pin", {"pin": p1})
         self.done("Web PIN set", s, r, ["Open sessions were closed: phones and iPads enter the PIN again."]
                   if s == 200 and isinstance(r, dict) and r.get("ok") else None)
+
+    def carregar(self, prazo=90):
+        """Ecra de arranque: espera pelo bridge (estado e aparelhos) e pelo estado das redes antes de abrir o dashboard, para
+        este nao aparecer meio vazio. Uma tecla salta a espera; ao fim de `prazo` s abre-se na mesma (o dashboard diz o
+        que falta). Devolve False so se se carregou em Q (sair)."""
+        t0 = time.time()
+        rodas = "|/-\\"
+        self.scr.timeout(150)
+        n = 0
+        while True:
+            _st, dv, _sh, ok, err, _at = self.snap.get()
+            aparelhos = isinstance(dv.get("devices"), list)
+            # O /api/net/status (iw, nmcli) pede-se em segundo plano; conta qualquer resposta (um erro nao deve prender aqui).
+            rede = ok and self.cache.get("net", 10, lambda: api("GET", "/api/net/status", timeout=15)) is not None
+            if ok and aparelhos and rede:
+                return True
+            passou = int(time.time() - t0)
+            if passou >= prazo:
+                return True
+            h, w = self.scr.getmaxyx()
+            self.scr.erase()
+            linhas = [("ATOM BRIDGE", self.attr("cyan") | curses.A_BOLD), ("", 0),
+                      ("Loading %s" % rodas[n % 4], curses.A_BOLD), ("", 0)]
+            for txt, feito in (("bridge", ok), ("cameras and devices", ok and aparelhos), ("networks", rede)):
+                linhas.append(("%s %-20s" % ("[x]" if feito else "[ ]", txt), self.attr("green") if feito else self.attr("dim")))
+            linhas.append(("", 0))
+            if not ok and passou >= 5:
+                linhas.append(("the bridge is starting (%s)" % (err or "no answer"), self.attr("yellow")))
+                linhas.append(("check: systemctl status camera-bridge", self.attr("dim")))
+            linhas.append(("%ds   any key: open now   Q: quit" % passou, self.attr("dim")))
+            y0 = max(0, (h - len(linhas)) // 2)
+            for i, (txt, a) in enumerate(linhas):
+                if y0 + i < h - 1:
+                    self.put(y0 + i, max(0, (w - 40) // 2), txt, a)
+            self.scr.refresh()
+            n += 1
+            k = self.scr.getch()
+            if k in (ord("q"), ord("Q")):
+                return False
+            if k != -1:
+                return True
 
     def pin_arranque(self):
         """Ao arrancar a consola, sem PIN da pagina definido, pergunta se se quer um (depois dos avisos de licenca). Nao bloqueia:
@@ -7402,14 +7441,14 @@ class Ui:
             if not self.confirm("The Atom has the latest code from GitHub (%s) but it is NOT installed:\n"
                                 "running now: %s %s\n\nThe last install did not finish (see the update log).\n\n"
                                 "Install it now? Bridge restarts for 1-2 min"
-                                % ((d.get("current") or "?")[:60], inst.get("commit", "?"), (inst.get("subject") or "")[:50])):
+                                % ((d.get("current") or "-")[:60], inst.get("commit", "-"), (inst.get("subject") or "")[:50])):
                 return
         elif not novos and not inst.get("commit"):
             # Atom de antes do version.json: nao se sabe o que corre. Se o pull se fez e a instalacao falhou, so
             # instalando outra vez se sai disto (o "Already up to date" deixava o Atom com o codigo velho).
             if not self.confirm("GitHub: %s\n\nThe Atom has this code but may not have installed it.\n\n"
                                 "Install it again now? Bridge restarts for 1-2 min"
-                                % (d.get("current") or "?")[:70]):
+                                % (d.get("current") or "-")[:70]):
                 return
         elif not novos:
             self.done("Update from GitHub", 200, {"ok": True},
@@ -7759,11 +7798,13 @@ def _ttyname(fd):
 def main(scr):
     snap = Snapshot()
     stop = threading.Event()
-    snap.poll_once()
+    # O primeiro poll ja nao bloqueia o ecra (com o bridge a arrancar ficava em branco): o ecra de arranque espera por ele.
     threading.Thread(target=snap.run, args=(stop,), daemon=True).start()
     threading.Thread(target=snap.run_f6, args=(stop,), daemon=True).start()
     ui = Ui(scr, snap)
     try:
+        if not ui.carregar():
+            return None
         ui.pin_arranque()
         return ui.loop()
     finally:

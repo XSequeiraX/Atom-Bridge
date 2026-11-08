@@ -1056,7 +1056,7 @@ def check_health():
             fraca = (pct is not None and pct <= 20) or (mins is not None and mins <= 20)
             if fraca and not warned.get("atom_low"):
                 warned["atom_low"] = True
-                note_fault("Atom battery low: %s%%%s" % (pct if pct is not None else "?",
+                note_fault("Atom battery low: %s%%%s" % (pct if pct is not None else "-",
                                                          " (~%d min)" % mins if mins is not None else ""))
         elif pw.get("ac"):
             warned.pop("atom_ac", None)
@@ -1944,7 +1944,7 @@ def camera_status_fd_loop(fd):
                                     # continuously, and logging every packet spammed
                                     # the journal (and the SD card) all through a take.
                                     storage_line = "Storage: " + " | ".join(
-                                        f"{state.get(f'slot{k+1}_name', '?')}"
+                                        f"{state.get(f'slot{k+1}_name', '-')}"
                                         f"{'*' if state['active_slot'] == k + 1 else ''}"
                                         for k in range(len(media)))
                                     if storage_line != state.get("_last_storage_line"):
@@ -2490,7 +2490,7 @@ def instantaneo_condicoes():
     lendo o log.
     """
     modo, mhz = wlan_radio()
-    partes = [f"uplink {uplink_ssid() or modo or '?'}"
+    partes = [f"uplink {uplink_ssid() or modo or '-'}"
               + (f" {mhz}MHz" if mhz else " down")]
     try:
         if ap_modo.externo():
@@ -2498,10 +2498,10 @@ def instantaneo_condicoes():
         else:
             info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
             canal = next((l.strip().split()[1] for l in info.splitlines()
-                          if l.strip().startswith("channel")), "?")
+                          if l.strip().startswith("channel")), "-")
             partes.append(f"AP ch{canal}" if "type AP" in info else "AP down")
     except Exception:
-        partes.append("AP ?")
+        partes.append("AP -")
     n = len(adaptadores_presentes())
     partes.append(f"{n} BT adapter" + ("s" if n != 1 else "")
                   + f" (BM {CAMERA_ADAPTER})")

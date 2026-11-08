@@ -315,7 +315,7 @@ class BMCam:
         self._ler_tc(amostras)
         st = self._st
         tc, off, err = st.get("tc"), st.get("tc_offset"), st.get("tc_err")
-        fonte = (st.get("tcsource") or {}).get("timecodeInputSource") or "?"
+        fonte = (st.get("tcsource") or {}).get("timecodeInputSource") or "-"
         if tc is None:
             return False, "the mobile did not answer the timecode request"
         if off is None:
@@ -332,7 +332,7 @@ class BMCam:
         self._ler_tc(3)
         st = self._st
         off, err, tc = st.get("tc_offset"), st.get("tc_err"), st.get("tc")
-        fonte = (st.get("tcsource") or {}).get("timecodeInputSource") or "?"
+        fonte = (st.get("tcsource") or {}).get("timecodeInputSource") or "-"
         if tc is None:
             return
         nota = "%s: mobile TC %s (%s)" % (quando, tc, fonte)

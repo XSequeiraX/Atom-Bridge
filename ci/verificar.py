@@ -39,12 +39,15 @@ CONSOLA = [
     ("nomes inteiros", "100x40", "normal", [], ["iPhone Cabin", "GoPro 1"], ["iPh ", " GP 1"]),
     # As Canon so gravam em modo video: uma em modo foto aparece como "not video" (nao como "ready") e nao ha nada de fotos.
     ("Canon em modo foto", "100x40", "normal", [], ["not video"], ["PHOTO", "shots"]),
+    # Ao arrancar, enquanto o bridge nao responde: o ecra de arranque, e so depois o dashboard (que nao aparece meio vazio).
+    ("ecra de arranque", "100x30", "arranque", [], ["ATOM BRIDGE", "Loading", "[ ] bridge"], ["GATEWAYS", "REC  VIA"]),
+    ("arranque acaba no dashboard", "100x40", "arranque", ["!wait:6"], ["GATEWAYS", "REC  VIA"], ["Loading"]),
     ("assistente: passo Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9,
      ["10/18   Sony", "Sony helper: running", "A7 IV", "ILCE-7M4  battery 64%", "card 1h10m"]),
     ("assistente: TC das Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9 + ["\\r", "!wait:2"],
      ["timecode set 10:00:00:00", "OK. N: next step"]),
-    ("AP externo na Ethernet", "100x40", "apext", [], ["EXT AP (Ethernet enp3s0)", "CAM-AP", "ETHERNET",
-                                                       "enp3s0 up 1000M (cameras' AP)", "lan2 down"], ["channel 6"]),
+    ("AP externo na Ethernet", "100x40", "apext", [], ["EXT AP  CAM-AP", "ETHERNET",
+                                                       "enp3s0 up 1000M (cameras' AP)", "lan2 down"], ["channel 6", "(Ethernet"]),
     ("ajuda", "100x40", "normal", ["?"], ["HELP", "Keys"]),
     # Issue #35: o nome ou o alias novo aparece logo no menu aberto (antes so depois de sair e voltar a entrar)
     ("alias novo no menu", "100x40", "normal", ["\\d", "\\d", "\\d", "\\r", "6", "\x7f" * 8 + "B-cam", "\\r", "!wait:2"],
@@ -551,6 +554,38 @@ def avisos_instalador():
     return erros
 
 
+def ap_cameras_ligadas():
+    """A linha do AP (dongle ou externo) conta como cameras nao so as Canon com reserva de DHCP mas tambem as que o bridge usa
+    por IP (telemoveis, Sony, BMPCC extra): antes um rig sem Canon reservadas mostrava 0 cameras."""
+    import ast
+    import types
+    src = open(os.path.join(RAIZ, "atom", "app", "rotas_sistema.py")).read()
+    arv = ast.parse(src)
+    fns = [n for n in arv.body if isinstance(n, ast.FunctionDef) and n.name in ("_ips_de_cameras", "_ap_ligados")]
+    mod = ast.Module(body=fns, type_ignores=[])
+    ns = {}
+    canon = types.SimpleNamespace(name="R6", ip="192.168.4.80")
+    ns["nucleo"] = types.SimpleNamespace(
+        canon_ccapi=types.SimpleNamespace(CAMERAS={"canon1": canon}),
+        iphs=types.SimpleNamespace(status=lambda: {"iphone1": {"name": "iPhone A", "host": "192.168.4.50"}}),
+        sonys=types.SimpleNamespace(status=lambda: {"sony1": {"name": "A7 IV", "host": "192.168.4.60"}}),
+        bmfleet=types.SimpleNamespace(cams={"bm2": types.SimpleNamespace(name="BMPCC 2", host="192.168.4.30:80")}))
+    ips = {"aa:00:00:00:00:01": "192.168.4.80", "aa:00:00:00:00:02": "192.168.4.50", "aa:00:00:00:00:03": "192.168.4.60",
+           "aa:00:00:00:00:04": "192.168.4.30", "aa:00:00:00:00:05": "192.168.4.99", "aa:00:00:00:00:06": "192.168.4.81"}
+    ns["known_camera_macs"] = lambda: {"aa:00:00:00:00:06": "R5"}          # uma Canon so pela reserva de DHCP
+    ns["ap_aparelhos"] = lambda macs: [{"mac": m, "ip": ips.get(m), "name": "unknown"} for m in macs]
+    ns["ap_memorizados"] = lambda macs: []
+    exec(compile(mod, "rotas_sistema.py", "exec"), ns)
+    out = {}
+    ns["_ap_ligados"](out, sorted(ips))
+    erros = []
+    if out.get("ap_cams") != ["A7 IV", "BMPCC 2", "R5", "R6", "iPhone A"]:
+        erros.append("ap_cams devia ter as 5 cameras (reserva e IP): %r" % out.get("ap_cams"))
+    if out.get("ap_clients") != 6 or out.get("ap_others") != 1 or [o["ip"] for o in out.get("ap_devices") or []] != ["192.168.4.99"]:
+        erros.append("o aparelho desconhecido devia ficar nos outros: %r" % {k: out.get(k) for k in ("ap_clients", "ap_others", "ap_devices")})
+    return erros
+
+
 def erros_curtos():
     """Os erros de rede chegam curtos a consola, a pagina e ao registo (issue #34), com as mensagens reais das bibliotecas;
     a copia do bridge-ctl.py da o mesmo que o atom/app/curto.py."""
@@ -809,6 +844,7 @@ if __name__ == "__main__":
                     ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo),
                     ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces),
                     ("Portas Ethernet: listar e renomear", portas_ethernet),
-                    ("Avisos de licenca: so no instalador", avisos_instalador)):
+                    ("Avisos de licenca: so no instalador", avisos_instalador),
+                    ("AP: cameras ligadas (reserva ou IP)", ap_cameras_ligadas)):
         ok = grupo(nome, f()) and ok
     sys.exit(0 if ok else 1)

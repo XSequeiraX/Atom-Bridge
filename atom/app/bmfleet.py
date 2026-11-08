@@ -108,7 +108,7 @@ class BmCam:
         if self.mode != "bridge":
             return False, "%s: the C3 is in standalone mode (switch it to Bridge)" % self.name
         if self.phase != "ready":
-            return False, "%s: the BMPCC is not ready on the C3 (%s)" % (self.name, self.phase or "?")
+            return False, "%s: the BMPCC is not ready on the C3 (%s)" % (self.name, self.phase or "-")
         return True, ""
 
     def running(self):

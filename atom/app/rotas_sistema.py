@@ -186,6 +186,55 @@ def ap_aparelhos(macs):
     return sorted(out, key=lambda d: (d["name"] == "unknown", d["name"]))
 
 
+def _ips_de_cameras():
+    """IP -> nome de cada camara que o bridge usa pela rede das cameras: Canon, telemoveis, Sony e as BMPCC extra (pelo C3
+    de cada uma). As GoPro e a BMPCC principal nao estao nesta rede (vao por Bluetooth, pelos gateways)."""
+    out = {}
+    try:
+        for cam in list(nucleo.canon_ccapi.CAMERAS.values()):
+            if getattr(cam, "ip", None):
+                out[str(cam.ip).split(":")[0]] = cam.name
+    except Exception:
+        pass
+    try:
+        for c in list(nucleo.iphs.status().values()) + list(nucleo.sonys.status().values()):
+            if c.get("host"):
+                out[str(c["host"]).split(":")[0]] = c.get("name") or c.get("id")
+    except Exception:
+        pass
+    try:
+        for cam in list(nucleo.bmfleet.cams.values()):
+            if cam.host:
+                out[cam.host.split(":")[0]] = cam.name
+    except Exception:
+        pass
+    return out
+
+
+def _ap_ligados(out, macs):
+    """Preenche no /api/net/status quem esta ligado a rede das cameras (dongle ou AP externo): ap_cams (os nomes das
+    cameras), ap_clients, ap_others, ap_devices (os que nao sao cameras), ap_known e ap_now. Uma camara reconhece-se pela
+    reserva de DHCP (Canon) ou pelo IP que o bridge usa para ela (telemoveis, Sony, BMPCC extra): antes so as reservas
+    contavam, e um rig sem Canon reservadas mostrava 0 cameras."""
+    known = known_camera_macs()
+    por_ip = _ips_de_cameras()
+    agora = ap_aparelhos(macs)
+    cams = {}
+    for o in agora:
+        if o["mac"] in known:
+            o["name"], o["camera"] = known[o["mac"]], True
+        elif o.get("ip") in por_ip:
+            o["name"], o["camera"] = por_ip[o["ip"]], True
+        if o.get("camera"):
+            cams[o["mac"]] = o["name"]
+    out["ap_cams"] = sorted(set(cams.values()))
+    out["ap_clients"] = len(macs)
+    out["ap_others"] = len(macs) - len(cams)
+    out["ap_devices"] = [o for o in agora if not o.get("camera")]
+    out["ap_known"] = ap_memorizados(macs)
+    out["ap_now"] = agora
+
+
 def ap_memorizados(ligados):
     """Os aparelhos que o AP das camaras conhece mas que nao estao ligados agora: as reservas de DHCP (as camaras) e
     os que ja pediram endereco (leases). [{mac, ip, name, kind}]"""
@@ -685,7 +734,7 @@ def api_preflight():
     if mhz is None:
         nota("Uplink", "no wifi on %s" % UPLINK_IFACE)
     else:
-        nota("Uplink", f"{uplink_ssid() or modo or '?'} \u00b7 {mhz} MHz"
+        nota("Uplink", f"{uplink_ssid() or modo or '-'} \u00b7 {mhz} MHz"
                        + (" \u00b7 SHARES THE BAND WITH BLUETOOTH" if mhz < 3000 else ""))
     if ap_modo.externo():
         porta = ap_modo.iface_ap(AP_IFACE)
@@ -695,9 +744,9 @@ def api_preflight():
             info = _run(["iw", "dev", AP_IFACE, "info"], timeout=6).stdout
             no_ar = "type AP" in info
             canal = next((l.strip().split()[1] for l in info.splitlines()
-                          if l.strip().startswith("channel")), "?")
+                          if l.strip().startswith("channel")), "-")
         except Exception:
-            no_ar, canal = False, "?"
+            no_ar, canal = False, "-"
         nota("Camera AP", f"{AP_CON} up on channel {canal}" if no_ar else f"{AP_CON} offline")
     if not ap_modo.externo() and os.path.isdir("/sys/bus/usb/drivers/ath9k_htc"):                  # o dongle do AP (AR9271) precisa do firmware 1.4.0
         fw_ok = any(os.path.isfile(d + "/ath9k_htc/htc_9271-1.4.0.fw") for d in ("/lib/firmware", "/usr/lib/firmware"))
@@ -743,7 +792,7 @@ def api_preflight():
     _bat = _pw.get("battery") or {}
     if _pw.get("ac") is False:
         add(not ((_bat.get("percent") or 100) <= 20), "Atom power",
-            "ON BATTERY %s%%" % (_bat.get("percent") if _bat.get("percent") is not None else "?"))
+            "ON BATTERY %s%%" % (_bat.get("percent") if _bat.get("percent") is not None else "-"))
     else:
         add(True, "Atom power", "charger connected" if _pw.get("ac") else "unknown")
 
@@ -756,7 +805,7 @@ def api_preflight():
     add((h.get("swap_used_mb") or 0) < 100, "Memory",
         f"{h.get('mem_percent')}% used ({h.get('mem_available_mb')}MB free), swap {h.get('swap_used_mb')}MB")
     t = h.get("soc_temp_c")
-    add(t is None or t < 70, "Temperature", f"{t}\u00B0C" if t is not None else "?")
+    add(t is None or t < 70, "Temperature", f"{t}\u00B0C" if t is not None else "-")
 
     # As informativas ficam de FORA do veredicto. Sem este filtro, um `ok:
     # None` -- que e falso em Python -- fazia o botao dizer NOT READY sempre,
@@ -814,18 +863,7 @@ def api_net_status():
             porta = ap_modo.iface_ap(AP_IFACE)
             out["ap_iface"] = porta
             out["ap_up"] = ap_modo.no_ar(porta)
-            macs = ap_modo.clientes(porta) if out["ap_up"] else []
-            known = known_camera_macs()
-            out["ap_cams"] = sorted({known[m] for m in macs if m in known})
-            out["ap_clients"] = len(macs)
-            out["ap_others"] = len(macs) - sum(1 for m in macs if m in known)
-            out["ap_devices"] = ap_aparelhos([m for m in macs if m not in known])
-            out["ap_known"] = ap_memorizados(macs)
-            agora = ap_aparelhos(macs)
-            for o in agora:
-                if o["mac"] in known:
-                    o["name"], o["camera"] = known[o["mac"]], True
-            out["ap_now"] = agora
+            _ap_ligados(out, ap_modo.clientes(porta) if out["ap_up"] else [])
         except Exception:
             pass
         out["wifi_ifaces"] = [i for i in wifi_interfaces() if i["iface"] != AP_IFACE] \
@@ -843,18 +881,7 @@ def api_net_status():
         dump = _run(["iw", "dev", AP_IFACE, "station", "dump"], timeout=6).stdout
         macs = [ln.split()[1].lower() for ln in dump.splitlines()
                 if ln.startswith("Station") and len(ln.split()) > 1]
-        known = known_camera_macs()
-        cams = sorted({known[m] for m in macs if m in known})
-        out["ap_clients"] = len(macs)
-        out["ap_cams"] = cams
-        out["ap_others"] = len(macs) - sum(1 for m in macs if m in known)
-        out["ap_devices"] = ap_aparelhos([m for m in macs if m not in known])
-        out["ap_known"] = ap_memorizados(macs)
-        agora = ap_aparelhos(macs)                  # todos os ligados agora (as camaras pelo nome da reserva)
-        for o in agora:
-            if o["mac"] in known:
-                o["name"], o["camera"] = known[o["mac"]], True
-        out["ap_now"] = agora
+        _ap_ligados(out, macs)
     except Exception:
         pass
     out["wifi_ifaces"] = wifi_interfaces()

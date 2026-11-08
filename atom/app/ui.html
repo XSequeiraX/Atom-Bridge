@@ -2111,7 +2111,7 @@
         if (!n) { out.innerHTML = '<span style="color:var(--red)">offline</span>'; return; }
         // Uma linha por radio, cada um com o seu estado: sao duas placas
         // distintas com papeis distintos, e juntar tudo escondia qual falhou.
-        const q = dbm => dbm == null ? '?' :
+        const q = dbm => dbm == null ? '-' :
             (dbm >= -50 ? 'EXCELLENT' : dbm >= -60 ? 'GOOD' : dbm >= -70 ? 'FAIR' : 'POOR');
         const marca = (ok, txt) => '<span style="color:var(--' + (ok ? 'green' : 'red') + ')">'
             + (ok ? '\u2713' : '\u2717') + ' ' + txt + '</span>';
@@ -2119,7 +2119,7 @@
         if (n.uplink_ssid) {
             const dbm = n.uplink_signal != null ? parseInt(n.uplink_signal, 10) : null;
             L.push(marca(true, 'UPLINK &middot; ' + escHtml(n.uplink_ssid)));
-            L.push('&nbsp;&nbsp;ch' + escHtml(n.uplink_chan || '?') + ' &middot; ' + q(dbm)
+            L.push('&nbsp;&nbsp;ch' + escHtml(n.uplink_chan || '-') + ' &middot; ' + q(dbm)
                    + (dbm != null ? ' (' + dbm + ' dBm)' : '')
                    + (n.uplink_ip ? ' &middot; ' + escHtml(n.uplink_ip) : ''));
         } else {
@@ -2131,12 +2131,12 @@
         if ((n.ap_devices || []).length) quem.push(escHtml(n.ap_devices.map(o => o.name + (o.ip ? ' (' + o.ip + ')' : '')).join(', ')));
         else if (n.ap_others) quem.push(n.ap_others + (n.ap_others > 1 ? ' others' : ' other'));
         if (n.ap_mode === 'external') {
-            L.push(marca(!!n.ap_up, 'EXTERNAL AP &middot; Ethernet ' + escHtml(n.ap_iface || '?')));
+            L.push(marca(!!n.ap_up, 'EXT AP'));
             L.push('&nbsp;&nbsp;' + (n.ap_up ? (quem.join(' &middot; ') || 'no clients') : 'offline (cable?)'));
         } else {
             L.push(marca(!!n.ap_up, 'EXT WI-FI' + (n.ap_ssid ? ' &middot; ' + escHtml(n.ap_ssid) : '')));
             L.push('&nbsp;&nbsp;' + (n.ap_up
-                ? 'ch' + escHtml(n.ap_chan || '?') + ' &middot; ' + (quem.join(' &middot; ') || 'no clients')
+                ? 'ch' + escHtml(n.ap_chan || '-') + ' &middot; ' + (quem.join(' &middot; ') || 'no clients')
                 : 'offline'));
         }
         ethList = n.ethernet || [];
@@ -2192,8 +2192,8 @@
         const cor = c => 'color:var(--' + c + ')';
         const linhas = [
             '<span style="' + cor(up ? 'green' : 'red') + '">' + (up ? '\u2713' : '\u2717')
-                + ' ' + escHtml(r.state || '?') + '</span>',
-            escHtml(r.hostname || '?') + '  ' + escHtml((r.ips || [])[0] || 'no address'),
+                + ' ' + escHtml(r.state || '-') + '</span>',
+            escHtml(r.hostname || '-') + '  ' + escHtml((r.ips || [])[0] || 'no address'),
             r.peers_online + ' of ' + r.peers_total + ' devices online',
         ];
         if (r.health && r.health.length) {
@@ -2256,7 +2256,7 @@
             if (!n) return;
             const el = document.getElementById('netInfo');
             // dBm means nothing at a glance; the word does.
-            const q = (dbm) => dbm == null ? '?' :
+            const q = (dbm) => dbm == null ? '-' :
                 (dbm >= -50 ? 'EXCELLENT' : dbm >= -60 ? 'GOOD' :
                  dbm >= -70 ? 'FAIR' : 'POOR');
             // Three short lines instead of one long one with pipes: the SSID and
@@ -2266,7 +2266,7 @@
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const lines = [];
             if (n.uplink_ssid) {
-                lines.push(esc(n.uplink_ssid) + ' ch' + esc(n.uplink_chan || '?'));
+                lines.push(esc(n.uplink_ssid) + ' ch' + esc(n.uplink_chan || '-'));
                 lines.push(q(n.uplink_signal != null ? parseInt(n.uplink_signal, 10) : null) +
                            (n.uplink_ip ? '  ' + esc(n.uplink_ip) + ':8080' : ''));
             } else {
@@ -2279,7 +2279,7 @@
             if (n.ap_cams && n.ap_cams.length) who.push(esc(n.ap_cams.join(', ')));
             if (n.ap_others) who.push(n.ap_others + (n.ap_others > 1 ? ' others' : ' other'));
             if (!who.length) who.push(n.ap_clients ? esc(n.ap_clients) + ' unknown' : 'no clients');
-            lines.push(n.ap_up ? ((n.ap_mode === 'external' ? 'AP ext' : 'AP ch' + esc(n.ap_chan || '?')) + ' \u00B7 ' + who.join(' \u00B7 '))
+            lines.push(n.ap_up ? ((n.ap_mode === 'external' ? 'AP ext' : 'AP ch' + esc(n.ap_chan || '-')) + ' \u00B7 ' + who.join(' \u00B7 '))
                      : 'AP down');
             const svc = Object.entries(n.services || {})
                         .filter(([k, v]) => v !== 'active').map(([k]) => k).join(', ');
@@ -2714,7 +2714,7 @@
             msg += 'No source is picked yet, so nothing is being set either way.';
         } else {
             msg += 'LTC is not the source in use (' + (NOME[d.clock_source_pref]
-                   || '?') + ' is), so the cameras keep being set.';
+                   || '-') + ' is), so the cameras keep being set.';
         }
         if (confirm(msg)) api('time/ltc/clear', 'POST', {});
     }
@@ -3972,7 +3972,7 @@
     async function soAdd() {
         const info = await getJson('/api/system/sony_sdk');
         if (!info) { alert('The bridge did not answer: update it from GitHub.'); return; }
-        if (!info.available && !confirm('The Sony helper is not running on the Atom:\n' + (info.why || '?') + '\n\nAdd the camera anyway?')) return;
+        if (!info.available && !confirm('The Sony helper is not running on the Atom:\n' + (info.why || '-') + '\n\nAdd the camera anyway?')) return;
         const usb = !confirm('Connect by Wi-Fi? (OK = Wi-Fi: the camera joins the Atom camera Wi-Fi, no gateway.  Cancel = USB cable)');
         const caps = info.caps || {}, quer = usb ? ['usb'] : ['wifi', 'lan'];
         const modelos = (info.models || []).filter(m => !caps[m] || quer.some(q => caps[m][q]));
@@ -4012,7 +4012,7 @@
         if (!info) { box.textContent = 'The bridge did not answer.'; return; }
         const achadas = (info.found || []).map(c => c.model + ' ' + (c.ip || c.serial || '') + (c.ssh ? ' SSH' : ''));
         box.textContent = (info.available ? 'Sony SDK ' + info.sdk + ', ' + (info.models || []).length + ' models.' :
-            'Sony helper not running: ' + (info.why || '?') + '.')
+            'Sony helper not running: ' + (info.why || '-') + '.')
             + '   Found: ' + (achadas.length ? achadas.join(', ') : 'none');
     }
 

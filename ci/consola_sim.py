@@ -1,7 +1,7 @@
 """Simulador da consola: corre o bridge-ctl.py num pseudo-terminal contra um bridge falso e devolve o ecra (pyte).
 
 Uso directo:  python3 ci/consola_sim.py 100x40 [cenario] [teclas...]
-  cenarios: termos (avisos de licenca por aceitar: a consola nao os pergunta) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet)
+  cenarios: termos (avisos de licenca por aceitar: a consola nao os pergunta) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet) | arranque (o bridge so responde ao fim de 6 s)
   teclas: texto literal, ou \\e=ESC, \\r=Enter, \\d=seta baixo, \\u=seta cima; !wait:N espera N s; !clear fecha a take
 Do ci/verificar.py: correr(cols, linhas, cenario, teclas) -> [linhas do ecra]. Nada fica fora de uma pasta temporaria.
 """
@@ -94,7 +94,10 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         st, dv, net = scen(CEN[0])
         p = self.path.split("?")[0]
-        if p == "/api/status": return self._send(200, st)
+        if p == "/api/status":
+            if CEN[0] == "arranque" and time.time() - T0[0] < 6:      # o bridge ainda a arrancar: o ecra de arranque espera
+                return self._send(503, {"error": "starting"})
+            return self._send(200, st)
         if p == "/api/devices": return self._send(200, dv)
         if p == "/api/net/status": return self._send(200, net)
         if p == "/api/system/terms":

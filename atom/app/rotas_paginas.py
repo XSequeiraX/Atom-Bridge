@@ -21,9 +21,9 @@ def api_login():
     token, err, code = acesso.login(request.remote_addr or "", str(d.get("pin") or ""))
     if not token:
         if code == 401:
-            log_event("Web PIN: wrong PIN from %s" % (request.remote_addr or "?"))
+            log_event("Web PIN: wrong PIN from %s" % (request.remote_addr or "-"))
         return jsonify({"ok": False, "error": err}), code
-    log_event("Web PIN: session opened from %s" % (request.remote_addr or "?"))
+    log_event("Web PIN: session opened from %s" % (request.remote_addr or "-"))
     resp = jsonify({"ok": True})
     # HttpOnly (o JavaScript nao o le) e SameSite=Strict (nao vai em pedidos de outros sitios). Sem Secure: a pagina e
     # servida por HTTP na rede local (com Secure o browser nunca o devolvia).
