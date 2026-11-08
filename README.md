@@ -17,6 +17,12 @@ Funciona numa consola (curses) e numa página web (telemóvel, iPad).
 | Sony (Alpha, FX, ZV: A7 IV, FX3, A1, A9 III, ZV-E1... os modelos do Camera Remote SDK) | **Wi-Fi sem gateway** (a câmara entra no AP das câmaras, como as Canon) ou USB | REC confirmado pela câmara, bateria, cartão, ISO/íris/obturador, Time Code Preset. Pelo SDK da Sony (o ajudante já compilado vem no repositório). Ver `atom/app/sony/LEIA-ME.txt` e `AVISOS-LICENCAS.md` |
 | TC-1 (Deity) | Cabo ou Bluetooth | Leitura de LTC para o relógio do bridge |
 
+**Canon: ativar o CCAPI uma vez em cada câmara.** O CCAPI vem desligado de fábrica. Liga-se uma vez por câmara com a
+CCAPI Activation Tool da Canon (do site de programadores da Canon, a mesma conta do CCAPI), por USB, num computador
+**Windows ou Mac**. Não há versão para Linux, por isso o Atom não o faz. Depois de ativada, a câmara fica assim e o Atom
+usa-a por Wi-Fi sem precisar da ferramenta outra vez. (No Mac, há relatos de a ferramenta ficar a rodar sem acabar no
+macOS 15 com Apple Silicon: nesse caso, um PC Windows.)
+
 **Telemóveis (iPhone e Android): o bitrate pode ser demais.** Com a app Blackmagic Camera, um formato de bitrate alto pode ser mais
 do que a memória do telemóvel consegue escrever (ou do que lhe cabe), e a gravação falha a meio de uma take. O bridge avisa quando
 isso acontece (o telemóvel parou sozinho, alarme amarelo), mas a take já está perdida. Antes de uma take a sério: grava **vários minutos

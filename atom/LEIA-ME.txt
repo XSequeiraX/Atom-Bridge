@@ -16,7 +16,8 @@ Modulos de atom/app
   bmcam.py         telemoveis com a app Blackmagic Camera (iPhone e Android 3.4+, testados; cuidado com o bitrate: README), REST/WebSocket.
   gopro.py         GoPro pelos gateways ESP32-S3 (ate 4; cada GoPro mantem o id do bridge: gp1..gp3 no primeiro
                    gateway, gp11..gp13 no segundo, gp21..gp23 no terceiro).
-  canon_ccapi.py   Canon (CCAPI). So grava em modo video (o modo muda-se na propria camara).
+  canon_ccapi.py   Canon (CCAPI). So grava em modo video (o modo muda-se na propria camara). O CCAPI liga-se uma vez em
+                   cada camara com a CCAPI Activation Tool da Canon, por USB, num Windows ou Mac (nao ha para Linux).
   sony.py          Sony (Camera Remote SDK): as camaras (sonys.json), o REC confirmado e o estado; fala com o ajudante
                    sony/sony_ctl (ja compilado, com as bibliotecas da Sony: ver sony/LEIA-ME.txt, AVISO-SONY.md).
                    sony_sim.py e o simulador do ajudante (testes, sem SDK nem camara).
