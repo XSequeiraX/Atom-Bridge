@@ -2522,7 +2522,7 @@ class Ui:
         y_gws = y_net + n_net + g2
         y_falha = y_gws + n_gw                      # a falha (ou os dados velhos) e a linha que separa os gateways dos devices
         if not ok:
-            self.put(y_net, 1, "BRIDGE OFFLINE (%s)" % (err or "-"), self.attr("red"))
+            self.put(y_net, 1, "BRIDGE OFFLINE", self.attr("red"))
             self.put(y_net + 3, 1, "check: systemctl status camera-bridge", self.attr("dim"))
             if self.rows:
                 self.put(y_falha, 1, ("no fresh data for %ds" % idade_st) if idade_st is not None
@@ -7103,7 +7103,7 @@ class Ui:
         self.done("Web PIN set", s, r, ["Open sessions were closed: phones and iPads enter the PIN again."]
                   if s == 200 and isinstance(r, dict) and r.get("ok") else None)
 
-    def carregar(self, prazo=90):
+    def carregar(self, prazo=240):
         """Ecra de arranque: espera pelo bridge (estado e aparelhos) e pelo estado das redes antes de abrir o dashboard, para
         este nao aparecer meio vazio. Uma tecla salta a espera; ao fim de `prazo` s abre-se na mesma (o dashboard diz o
         que falta). Devolve False so se se carregou em Q (sair)."""
@@ -7128,9 +7128,9 @@ class Ui:
             for txt, feito in (("bridge", ok), ("cameras and devices", ok and aparelhos), ("networks", rede)):
                 linhas.append(("%s %-20s" % ("[x]" if feito else "[ ]", txt), self.attr("green") if feito else self.attr("dim")))
             linhas.append(("", 0))
-            if not ok and passou >= 5:
-                linhas.append(("the bridge is starting (%s)" % (err or "no answer"), self.attr("yellow")))
-                linhas.append(("check: systemctl status camera-bridge", self.attr("dim")))
+            # No arranque do Atom a consola abre antes do servico: e normal esperar. So se demorar muito se diz o que ver.
+            if not ok and passou >= 120:
+                linhas.append(("still starting: if it stays like this, systemctl status camera-bridge", self.attr("dim")))
             linhas.append(("%ds   any key: open now   Q: quit" % passou, self.attr("dim")))
             y0 = max(0, (h - len(linhas)) // 2)
             for i, (txt, a) in enumerate(linhas):
