@@ -165,7 +165,7 @@ jobs:
           [ -f "$notes" ] || { echo "::error::falta $notes"; exit 1; }
           cd dist
           ls -l
-          [ "$(ls Proton-*.zip proton-cli-*.zip | wc -l)" -eq 5 ] || { echo "::error::expected 5 zips"; exit 1; }
+          [ "$(ls Proton-*.zip proton-cli-*.zip | wc -l)" -eq 6 ] || { echo "::error::expected 6 zips (3 apps, 3 command lines)"; exit 1; }
           sha256sum *.zip > SHA256SUMS.txt
           cat SHA256SUMS.txt
           cd ..
