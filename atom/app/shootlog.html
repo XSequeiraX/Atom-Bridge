@@ -119,6 +119,7 @@
             <button class="btn" id="btnReload" onclick="load()">Reload</button>
             <button class="btn" id="btnNew" onclick="newLog()">New Log</button>
             <a class="btn" href="/api/log/shoot.csv" download="shoot_log.csv">Download CSV</a>
+            <button class="btn" id="btnTakesUsb" onclick="takesUsb(this)">Takes to USB</button>
         </div>
     </div>
 
@@ -180,6 +181,18 @@
             } catch (e) {
                 return {error: /Failed to fetch|NetworkError|Load failed/i.test(String(e)) ? 'no connection to the bridge' : String(e).replace(/\b[A-Za-z]*Error: /g, '')};
             }
+        }
+
+        // As takes (por camara, para o Proton) escritas na pen USB ligada ao Atom.
+        async function takesUsb(btn) {
+            btn.disabled = true;
+            try {
+                const r = await fetch('/api/log/takes/usb', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+                const d = await r.json().catch(() => ({}));
+                alert(r.ok && d.ok ? d.takes + ' take(s) in AtomBridge/ on the USB stick:\n' + (d.files || []).join('\n')
+                                   : (d.error || 'Could not write to the USB stick'));
+            } catch (e) { alert('Could not reach the Atom'); }
+            btn.disabled = false;
         }
 
         async function load() {

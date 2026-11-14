@@ -38,6 +38,12 @@ Modulos de atom/app
   simulador.py     gateways simulados (C3 com BMPCC, S3 com GoPros): o modo de treino da consola (GLOBAL SETTINGS >
                    TRAINING > Demo mode, /api/demo) e os testes; ver o README.
   bridge_client.py cliente da API do servico USB (bridge-usb).
+  ap_modo.py       quem serve a rede das cameras: o dongle (ps-control) ou um AP externo na Ethernet (o Atom fica com
+                   192.168.4.1 e o DHCP nessa porta). Modo em ap_modo.json. API: GET|POST /api/net/ap_mode.
+  ethernet.py      as portas Ethernet: estado, para que servem, e o nome fixo de cada uma (.link do systemd pelo caminho do
+                   hardware), aplicado logo. API: POST /api/net/eth/rename; o estado vai no /api/net/status.
+  takes_export.py  o shoot log por take e por camara (atom-takes/1, proton/CONTRATO.md), para o Proton: /api/log/takes,
+                   /api/log/takes.csv e, para a pen, POST /api/log/takes/usb.
   fw_ota.py        firmware dos gateways C3 e S3 por Wi-Fi (e o C3 por USB com o mpremote).
   gw_usb.py        configuracao inicial e actualizacao de C3 e S3 por USB, a partir do Atom: identifica a placa (esptool), grava o
                    firmware (S3: imagem completa se em branco, so a aplicacao se ja funciona; C3: MicroPython + ficheiros) e o Wi-Fi.

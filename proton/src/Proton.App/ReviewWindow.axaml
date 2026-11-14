@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Proton.App.ReviewWindow"
+        Title="Proton - shoot log and matches" Width="1420" Height="820" MinWidth="1000" MinHeight="500">
+  <Window.Styles>
+    <Style Selector="TextBlock.dim"><Setter Property="Opacity" Value="0.65" /></Style>
+    <Style Selector="TextBlock.cell"><Setter Property="FontSize" Value="12" /><Setter Property="VerticalAlignment" Value="Center" /><Setter Property="TextTrimming" Value="CharacterEllipsis" /></Style>
+    <Style Selector="TextBlock.mono"><Setter Property="FontFamily" Value="Menlo,Consolas,monospace" /></Style>
+    <Style Selector="TextBlock.colhead"><Setter Property="FontSize" Value="11" /><Setter Property="Opacity" Value="0.6" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="18" RowSpacing="10">
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Text="Shoot log and matches" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock x:Name="SummaryText" Classes="dim" />
+      <CheckBox x:Name="OnlyProblems" Content="Show only what needs checking" IsCheckedChanged="OnFilter" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1">
+      <ItemsControl x:Name="GroupList">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderThickness="1" BorderBrush="#44808080" Background="#14808080">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="{Binding HeaderBrush}" />
+                <Grid ColumnDefinitions="68,70,92,92,112,46,46,168,190,110,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Classes="colhead" Text="STATUS" />
+                  <TextBlock Grid.Column="1" Classes="colhead" Text="CAMERA" />
+                  <TextBlock Grid.Column="2" Classes="colhead" Text="ATOM TC" />
+                  <TextBlock Grid.Column="3" Classes="colhead" Text="FILE TC" />
+                  <TextBlock Grid.Column="4" Classes="colhead" Text="DIFFERENCE" />
+                  <TextBlock Grid.Column="5" Classes="colhead" Text="TAKE" />
+                  <TextBlock Grid.Column="6" Classes="colhead" Text="FILE" />
+                  <TextBlock Grid.Column="7" Classes="colhead" Text="FILE DAY" />
+                  <TextBlock Grid.Column="8" Classes="colhead" Text="FILE NAME" />
+                  <TextBlock Grid.Column="9" Classes="colhead" Text="MATCHED BY" />
+                  <TextBlock Grid.Column="10" Classes="colhead" Text="TO CHECK" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid ColumnDefinitions="68,70,92,92,112,46,46,168,190,110,*" ColumnSpacing="8" Margin="0,2">
+                        <TextBlock Grid.Column="0" Classes="cell" FontWeight="SemiBold" Text="{Binding Row.Status}" Foreground="{Binding Brush}" />
+                        <TextBlock Grid.Column="1" Classes="cell" Text="{Binding Row.Camera}" />
+                        <TextBlock Grid.Column="2" Classes="cell mono" Text="{Binding Row.AtomTc}" />
+                        <TextBlock Grid.Column="3" Classes="cell mono" Text="{Binding Row.FileTc}" />
+                        <TextBlock Grid.Column="4" Classes="cell mono" Text="{Binding Row.TcDiff}" />
+                        <TextBlock Grid.Column="5" Classes="cell mono" Text="{Binding Row.TakeLength}" />
+                        <TextBlock Grid.Column="6" Classes="cell mono" Text="{Binding Row.FileLength}" />
+                        <TextBlock Grid.Column="7" Classes="cell" Text="{Binding Row.FileDay}" />
+                        <TextBlock Grid.Column="8" Classes="cell" Text="{Binding Row.File}" ToolTip.Tip="{Binding Row.Path}" />
+                        <TextBlock Grid.Column="9" Classes="cell" Text="{Binding Row.Method}" ToolTip.Tip="{Binding Row.Method}" />
+                        <TextBlock Grid.Column="10" Classes="cell" Text="{Binding Row.Why}" Foreground="{Binding Brush}" TextWrapping="Wrap" TextTrimming="None" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+      <Button Content="Save as CSV..." Click="OnSave" />
+      <Button Content="Close" Click="OnClose" />
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" Classes="dim" />
+    </StackPanel>
+  </Grid>
+</Window>

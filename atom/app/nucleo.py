@@ -276,19 +276,26 @@ camera_char_path = None
 timecode_char_path = None
 
 
+# Os eventos chegam de varios fios ao mesmo tempo: sem isto, aparar o events.log (ler, cortar, reescrever) podia apagar uma
+# linha escrita entretanto por outro fio, e cortar a lista em memoria podia perder uma entrada. RLock: um log_event dentro de
+# outro (nao acontece hoje) nao bloqueia.
+_evento_lock = threading.RLock()
+
+
 def log_event(msg):
     msg = curto(msg)
     timestamp = time.strftime("%H:%M:%S")
     entry = f"[{timestamp}] {msg}"
-    _gravar_evento(entry)
-    state["log"].append(entry)
+    with _evento_lock:
+        _gravar_evento(entry)
+        state["log"].append(entry)
+        if len(state["log"]) > 50:
+            state["log"] = state["log"][-50:]
+        state["last_event"] = msg
     # Single write: stdout and stderr both land in the journal under this
     # unit, so printing to both duplicated every line (and doubled the SD
     # card writes that come with it).
     print(entry, file=sys.stderr, flush=True)
-    if len(state["log"]) > 50:
-        state["log"] = state["log"][-50:]
-    state["last_event"] = msg
 
 # === SHOOT LOG ===
 # Plain CSV of every confirmed recording start/stop across BMPCC + Canon
@@ -345,12 +352,13 @@ def _aparar_event_log():
     cada vez faria isto reescrever o ficheiro inteiro a cada evento.
     """
     try:
-        with open(EVENT_LOG_PATH, encoding="utf-8") as f:
-            linhas = f.readlines()
-        if len(linhas) <= EVENT_LOG_MAX:
-            return
-        with open(EVENT_LOG_PATH, "w", encoding="utf-8") as f:
-            f.writelines(linhas[-EVENT_LOG_MAX // 2:])
+        with _evento_lock:
+            with open(EVENT_LOG_PATH, encoding="utf-8") as f:
+                linhas = f.readlines()
+            if len(linhas) <= EVENT_LOG_MAX:
+                return
+            with open(EVENT_LOG_PATH, "w", encoding="utf-8") as f:
+                f.writelines(linhas[-EVENT_LOG_MAX // 2:])
     except OSError:
         pass
 
@@ -3186,9 +3194,9 @@ def _ref_para(source):
             dev = "f6"
         else:
             dev = (next((k for k, c in list(canon_ccapi.CAMERAS.items()) if c.name == source), None)
-                   or next((k for k, c in iphs.cams.items() if c.name == source), None)
-                   or next((k for k, c in gofleet.cams.items() if c.name == source), None)
-                   or next((k for k, c in sonys.cams.items() if c.name == source), None)
+                   or next((k for k, c in list(iphs.cams.items()) if c.name == source), None)
+                   or next((k for k, c in list(gofleet.cams.items()) if c.name == source), None)
+                   or next((k for k, c in list(sonys.cams.items()) if c.name == source), None)
                    or next((k for k, c in list(bmfleet.cams.items()) if c.name == source), None))
         return alias.get(dev, "") if dev else ""
     except Exception:

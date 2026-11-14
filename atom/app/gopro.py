@@ -513,7 +513,7 @@ class Gateway:
         host = str(host or "").strip()
         if not host or len(host) > 60 or any(c in host for c in " /\\?#"):
             return False, "host: an IP address or name, e.g. 192.168.4.96"
-        for g in self.hub.gws.values():
+        for g in list(self.hub.gws.values()):
             if g is not self and g.host and g.host.split(":")[0] == host.split(":")[0]:
                 return False, "that address already belongs to %s" % g.label()
         if self.any_running() and host != self.host:
@@ -736,7 +736,7 @@ class GoproFleet:
         host = str(host or "").strip()
         if not host or len(host) > 60 or any(c in host for c in " /\\?#"):
             return False, "host: an IP address or name, e.g. 192.168.4.97"
-        if any(g.host and g.host.split(":")[0] == host.split(":")[0] for g in self.gws.values()):
+        if any(g.host and g.host.split(":")[0] == host.split(":")[0] for g in list(self.gws.values())):
             return False, "that gateway is already here"
         if parece_c3(host):
             return False, "that is a C3 gateway (BMPCC), not an S3 (GoPro)"
@@ -784,7 +784,7 @@ class GoproFleet:
     def disponiveis(self):
         """S3 que se anunciaram agora e ainda nao estao na lista."""
         agora = time.time()
-        usados = {g.host.split(":")[0] for g in self.gws.values() if g.host}
+        usados = {g.host.split(":")[0] for g in list(self.gws.values()) if g.host}
         return sorted(ip for ip, t in list(self.found.items()) if agora - t < 30 and ip not in usados)
 
     # ---- consulta ----
@@ -823,7 +823,7 @@ class GoproFleet:
                 continue
             partes = txt[8:].split()
             ip = partes[0] if partes else ""
-            if not ip or any(g.host.split(":")[0] == ip for g in self.gws.values() if g.host):
+            if not ip or any(g.host.split(":")[0] == ip for g in list(self.gws.values()) if g.host):
                 continue
             g1 = self._primeiro()
             if len(self.gws) == 1 and g1.enabled and (not g1.gateway_ok or not g1.host):

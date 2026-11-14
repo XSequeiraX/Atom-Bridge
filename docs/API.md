@@ -111,6 +111,9 @@ Tudo o que e de um aparelho. O id e o do `GET /api/devices`; 404 se nao existe, 
 | POST | `/api/log/shoot/edit` | Corrige uma linha do log: o evento, a nota, ou ambos. |
 | POST | `/api/log/shoot/new` | Arquiva o shoot log actual e comeca um vazio. |
 | POST | `/api/log/shoot/note` | Escreve uma nota no shoot log, na take que estiver a decorrer. |
+| GET | `/api/log/takes` | O shoot log agrupado por take e por camara (formato atom-takes/1, ver proton/CONTRATO.md): inicio, fim, timecode, nome do ficheiro e veredicto de cada camara em cada take. E o que o Proton (o companion do Windows) vai buscar. ?day=AAAA-MM-DD so traz as takes desse dia. |
+| GET | `/api/log/takes.csv` | O mesmo que /api/log/takes em CSV: uma linha por take e por camara. ?day=AAAA-MM-DD so traz as takes desse dia. |
+| POST | `/api/log/takes/usb` | {"day": AAAA-MM-DD (opcional)}: escreve as takes (JSON e CSV, atom-takes/1) na pen USB ligada ao Atom, na pasta AtomBridge/. E o que o Proton le quando nao ha rede. 409 se nao ha pen. |
 
 ## login
 

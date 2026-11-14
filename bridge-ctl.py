@@ -6710,6 +6710,7 @@ class Ui:
                 ("shoot", "Shoot log"),
                 ("events", "Event log"),
                 ("note", "Add note"),
+                ("takes_usb", "Takes to the USB stick (for Proton)"),
                 Sec(""),
                 Sec("SFTP SERVER"),
                 ("sftp_info", "Info"),
@@ -6727,6 +6728,10 @@ class Ui:
             k = entradas[i][0]
             if k == "shoot":
                 self.shoot_log_screen()
+            elif k == "takes_usb":
+                s, d = self.call("Takes to the USB stick", "POST", "/api/log/takes/usb", {}, timeout=60)
+                self.done("Takes to the USB stick", s, d, ["%d take(s) in AtomBridge/ on the stick: %s" % (d.get("takes", 0), ", ".join(d.get("files") or []))]
+                          if s == 200 and isinstance(d, dict) and d.get("ok") else None)
             elif k == "events":
                 self.cache.drop("events")
                 self.pager("Event log", self.events_lines, cor=COR["log"])
@@ -7103,20 +7108,30 @@ class Ui:
         self.done("Web PIN set", s, r, ["Open sessions were closed: phones and iPads enter the PIN again."]
                   if s == 200 and isinstance(r, dict) and r.get("ok") else None)
 
-    def carregar(self, prazo=240):
-        """Ecra de arranque: espera pelo bridge (estado e aparelhos) e pelo estado das redes antes de abrir o dashboard, para
-        este nao aparecer meio vazio. Uma tecla salta a espera; ao fim de `prazo` s abre-se na mesma (o dashboard diz o
-        que falta). Devolve False so se se carregou em Q (sair)."""
+    def carregar(self, prazo=240, min_s=20, ligar_s=60):
+        """Ecra de arranque: espera pelo bridge (estado e aparelhos), pelo estado das redes e pelas primeiras ligacoes antes de
+        abrir o dashboard, para este nao aparecer meio vazio. Com o bridge acabado de arrancar (uptime_s < min_s) espera; e
+        enquanto houver camaras ou gateways "a ligar" espera tambem, ate o bridge ter ligar_s segundos (uma camara desligada
+        nao prende o arranque). Uma tecla abre ja; ao fim de `prazo` s abre-se na mesma. False so com Q (sair)."""
         t0 = time.time()
         rodas = "|/-\\"
         self.scr.timeout(150)
         n = 0
         while True:
-            _st, dv, _sh, ok, err, _at = self.snap.get()
+            st, dv, _sh, ok, err, _at = self.snap.get()
             aparelhos = isinstance(dv.get("devices"), list)
             # O /api/net/status (iw, nmcli) pede-se em segundo plano; conta qualquer resposta (um erro nao deve prender aqui).
             rede = ok and self.cache.get("net", 10, lambda: api("GET", "/api/net/status", timeout=15)) is not None
-            if ok and aparelhos and rede:
+            up = st.get("uptime_s") if ok else None
+            cedo = isinstance(up, (int, float)) and up < min_s           # um bridge sem uptime_s (antigo) nao espera por isto
+            a_ligar_cams, a_ligar_gws = [], []
+            if ok and aparelhos and not (isinstance(up, (int, float)) and up >= ligar_s):
+                try:
+                    a_ligar_cams = [r["label"] for r in build_rows(st, dv) if r.get("busy") and not r.get("conn")]
+                    a_ligar_gws = [g["name"] for g in gateways(st, dv) if g.get("state") == "connecting" and g.get("on", True)]
+                except Exception:
+                    pass
+            if ok and aparelhos and rede and not cedo and not a_ligar_cams and not a_ligar_gws:
                 return True
             passou = int(time.time() - t0)
             if passou >= prazo:
@@ -7125,8 +7140,13 @@ class Ui:
             self.scr.erase()
             linhas = [("ATOM BRIDGE", self.attr("cyan") | curses.A_BOLD), ("", 0),
                       ("Loading %s" % rodas[n % 4], curses.A_BOLD), ("", 0)]
-            for txt, feito in (("bridge", ok), ("cameras and devices", ok and aparelhos), ("networks", rede)):
+            ligados = ok and aparelhos and not cedo and not a_ligar_cams and not a_ligar_gws
+            for txt, feito in (("bridge", ok), ("cameras and devices", ok and aparelhos), ("networks", rede),
+                               ("first connections", ligados)):
                 linhas.append(("%s %-20s" % ("[x]" if feito else "[ ]", txt), self.attr("green") if feito else self.attr("dim")))
+            for nome_l, lst in (("connecting", a_ligar_cams), ("gateways", a_ligar_gws)):
+                if lst:
+                    linhas.append(("    %s: %s" % (nome_l, ", ".join(lst))[:60], self.attr("yellow")))
             linhas.append(("", 0))
             # No arranque do Atom a consola abre antes do servico: e normal esperar. So se demorar muito se diz o que ver.
             if not ok and passou >= 120:

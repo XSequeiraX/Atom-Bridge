@@ -1,0 +1,106 @@
+{
+  "format": "atom-takes/1",
+  "atom": "atom",
+  "timezone": "local time of the Atom",
+  "fps": 25,
+  "takes": [
+    {
+      "day": "2026-11-09",
+      "session": "Dia 1",
+      "take": 1,
+      "start": "2026-11-09 10:00:00",
+      "end": "2026-11-09 10:01:02",
+      "open": false,
+      "verdict": "good",
+      "tc_start": "10:00:00:00",
+      "cameras": [
+        {
+          "source": "BMPCC",
+          "alias": "A",
+          "start": "2026-11-09 10:00:00",
+          "stop": "2026-11-09 10:01:00",
+          "tc_start": "10:00:00:00",
+          "tc_stop": "10:01:00:00",
+          "clip": "A001_C001.braw",
+          "fault": false,
+          "settings": {}
+        },
+        {
+          "source": "R5",
+          "alias": "B",
+          "start": "2026-11-09 10:00:01",
+          "stop": "2026-11-09 10:01:01",
+          "tc_start": "10:00:01:00",
+          "tc_stop": "10:01:01:00",
+          "clip": "MVI_0001.MP4",
+          "fault": false,
+          "settings": {
+            "av": "4.0"
+          }
+        },
+        {
+          "source": "F6",
+          "alias": "",
+          "start": "2026-11-09 10:00:02",
+          "stop": "2026-11-09 10:01:02",
+          "tc_start": "10:00:02:00",
+          "tc_stop": null,
+          "clip": "",
+          "fault": false,
+          "settings": {}
+        }
+      ],
+      "notes": [
+        {
+          "at": "2026-11-09 10:01:05",
+          "kind": "good",
+          "tc": "10:01:05:00",
+          "text": "TC 10:01:05:00 | boa"
+        },
+        {
+          "at": "2026-11-09 10:01:06",
+          "kind": "note",
+          "tc": "10:01:06:00",
+          "text": "TC 10:01:06:00 | nota solta"
+        }
+      ]
+    },
+    {
+      "day": "2026-11-09",
+      "session": "Dia 1",
+      "take": 2,
+      "start": "2026-11-09 10:10:00",
+      "end": null,
+      "open": true,
+      "verdict": null,
+      "tc_start": "10:10:00:00",
+      "cameras": [
+        {
+          "source": "BMPCC",
+          "alias": "A",
+          "start": "2026-11-09 10:10:00",
+          "stop": null,
+          "tc_start": "10:10:00:00",
+          "tc_stop": null,
+          "clip": "",
+          "fault": false,
+          "settings": {}
+        },
+        {
+          "source": "R5",
+          "alias": "B",
+          "start": "2026-11-09 10:11:00",
+          "stop": null,
+          "tc_start": "10:11:00:00",
+          "tc_stop": null,
+          "clip": "",
+          "fault": false,
+          "settings": {
+            "av": "4.0"
+          }
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

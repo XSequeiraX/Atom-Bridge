@@ -41,6 +41,8 @@ que o C3 dispara por ele a sua BMPCC. No modo Bridge o C3 nem o procura. O bridg
   ecra; o PIN da página (GLOBAL SETTINGS > Web PIN) desbloqueia. A gravação continua e o ecra bloqueado mostra o estado.
 - **`docs/FRC-8-protocolo.pdf`**: o protocolo FRC-8 do Zoom F6 por USB-MIDI (ligação, mensagens, estado, limites). A fonte é `docs/frc8_protocolo.html` (PDF gerado com o Chromium).
 - **`firmware/`**: o firmware estável do S3 (GoPro, F6 com o Atom, F6 autónomo), pronto a gravar, com `gravar.py` e `LEIA-ME.md`.
+- **`proton/`**: o Proton, o companion de Windows e Mac: copia os cartões das câmaras com verificação e cruza os ficheiros
+  com as takes do Atom (CSV para o DaVinci Resolve, relatório do que falta). Ver `proton/README.md`.
 - **`testes/`**: as experiências (sonda BLE, ferramentas de ensaio do F6). Não fazem parte do produto; ver `testes/LEIA-ME.md`.
 - **`c3_fiz_bm/`**: firmware MicroPython do gateway C3 (BMPCC por Bluetooth, Wi-Fi, FIZ). Ver `c3_fiz_bm/LEIA-ME.txt`.
 - **`_esp32_tools/`**: firmware dos ESP32-S3 (gateway S3: modo GoPro ou modo F6 (FRC-8); ponte BLE).

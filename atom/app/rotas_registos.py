@@ -7,7 +7,9 @@ import csv
 import json
 import os
 import re
+import socket
 import subprocess
+import takes_export
 import threading
 import time
 from flask import jsonify, request
@@ -62,6 +64,49 @@ def api_shoot_log_json():
     except Exception as e:
         return jsonify({"error": str(e), "rows": []}), 500
     return jsonify({"rows": rows[-limit:][::-1], "total": len(rows)})
+
+
+@app.route('/api/log/takes', methods=['GET'])
+def api_log_takes():
+    """O shoot log agrupado por take e por camara (formato atom-takes/1, ver proton/CONTRATO.md): inicio, fim, timecode, nome do
+    ficheiro e veredicto de cada camara em cada take. E o que o Proton (o companion do Windows) vai buscar. ?day=AAAA-MM-DD so
+    traz as takes desse dia."""
+    try:
+        linhas = _shoot_log_linhas()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify(takes_export.exportar(linhas, day=request.args.get("day") or None, atom=socket.gethostname(),
+                                         fps=(state.get("_ltc_jam") or {}).get("fps") or 25))
+
+
+@app.route('/api/log/takes.csv', methods=['GET'])
+def api_log_takes_csv():
+    """O mesmo que /api/log/takes em CSV: uma linha por take e por camara. ?day=AAAA-MM-DD so traz as takes desse dia."""
+    try:
+        linhas = _shoot_log_linhas()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    csv_txt = takes_export.para_csv(takes_export.exportar(linhas, day=request.args.get("day") or None, atom=socket.gethostname(),
+                                                          fps=(state.get("_ltc_jam") or {}).get("fps") or 25))
+    return csv_txt, 200, {'Content-Type': 'text/csv; charset=utf-8',
+                          'Content-Disposition': 'attachment; filename="atom_takes.csv"'}
+
+
+@app.route('/api/log/takes/usb', methods=['POST'])
+def api_log_takes_usb():
+    """{\"day\": AAAA-MM-DD (opcional)}: escreve as takes (JSON e CSV, atom-takes/1) na pen USB ligada ao Atom, na pasta AtomBridge/.
+    E o que o Proton le quando nao ha rede. 409 se nao ha pen."""
+    dia = str(_body().get("day") or "").strip() or None
+    if dia and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", dia):
+        return jsonify({"ok": False, "error": "day: YYYY-MM-DD"}), 400
+    try:
+        exportado = takes_export.exportar(_shoot_log_linhas(), day=dia, atom=socket.gethostname(),
+                                          fps=(state.get("_ltc_jam") or {}).get("fps") or 25)
+        nomes = copia.guardar_takes_na_pen(exportado, takes_export.para_csv(exportado), dia)
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        return jsonify({"ok": False, "error": str(e)}), 409
+    log_event("Takes saved on the USB stick: %s" % ", ".join(nomes))
+    return jsonify({"ok": True, "files": nomes, "takes": len(exportado["takes"]), "folder": "AtomBridge"})
 
 
 _shoot_log_cache = {"chave": None, "rows": []}

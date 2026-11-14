@@ -1,0 +1,153 @@
+name: Proton release
+
+# Uma release do Proton (o companion de Windows e Mac): empurrar a tag  proton-v<versao>  (por exemplo proton-v0.0.1) compila, testa e
+# publica os ficheiros para descarregar. Nos ramos de trabalho so compila (sem publicar), para se ver que a release vai dar.
+# A versao vem da tag; as notas vem de proton/releases/<versao>.md.
+on:
+  push:
+    tags: ["proton-v*"]
+    branches: ["claude/**"]
+    paths:
+      - ".github/workflows/proton-release.yml"
+      - "proton/packaging/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  versao:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/proton-v* ]]; then
+            v="${GITHUB_REF#refs/tags/proton-v}"
+            [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag $GITHUB_REF: expected proton-vX.Y.Z"; exit 1; }
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            v="0.0.0-test"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  testes:
+    needs: versao
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4
+      - name: Testes do Proton
+        working-directory: proton
+        env:
+          DOTNET_ROLL_FORWARD: Major
+        run: dotnet test Proton.sln -c Release
+
+  windows:
+    needs: [versao, testes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4
+      - name: Proton.exe e linha de comandos (Windows x64)
+        working-directory: proton
+        env:
+          VER: ${{ needs.versao.outputs.version }}
+        run: |
+          set -e
+          mkdir -p ../dist /tmp/w
+          common=(-c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true "-p:Version=$VER")
+          dotnet publish src/Proton.App "${common[@]}" -o /tmp/w/Proton
+          dotnet publish src/Proton.Cli "${common[@]}" -o /tmp/w/cli
+          rm -f /tmp/w/*/*.pdb
+          [ -f /tmp/w/Proton/Proton.exe ] && [ -f /tmp/w/cli/proton-cli.exe ]
+          cp ../LICENSE /tmp/w/Proton/LICENSE.txt 2>/dev/null || true
+          (cd /tmp/w/Proton && zip -qr "$GITHUB_WORKSPACE/dist/Proton-$VER-windows-x64.zip" .)
+          (cd /tmp/w/cli && zip -qr "$GITHUB_WORKSPACE/dist/proton-cli-$VER-windows-x64.zip" .)
+          ls -la ../dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02      # v4
+        with:
+          name: dist-windows
+          path: dist/
+
+  mac:
+    needs: [versao, testes]
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4
+      - name: Proton.app e linha de comandos (Apple Silicon e Intel), assinados localmente
+        working-directory: proton
+        env:
+          VER: ${{ needs.versao.outputs.version }}
+        run: |
+          set -e
+          mkdir -p ../dist
+          for rid in osx-arm64 osx-x64; do
+            short="${rid/osx-/mac-}"
+            common=(-c Release -r "$rid" --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true "-p:Version=$VER")
+            dotnet publish src/Proton.App "${common[@]}" -o "/tmp/app-$rid"
+            dotnet publish src/Proton.Cli "${common[@]}" -o "/tmp/cli-$rid"
+            rm -f /tmp/app-$rid/*.pdb /tmp/cli-$rid/*.pdb
+            packaging/make-mac-app.sh "/tmp/app-$rid" "/tmp/mac-$rid" "$VER"
+            # Assinatura local ("ad hoc", sem conta Apple): um Mac Apple Silicon nao abre codigo arm64 sem ela. Nao e uma assinatura de
+            # programador: o Mac continua a pedir "abrir mesmo assim" na primeira vez (ver as notas da release).
+            codesign --force --sign - "/tmp/mac-$rid/Proton.app/Contents/MacOS/Proton"
+            codesign --force --sign - "/tmp/cli-$rid/proton-cli"
+            codesign --force --sign - "/tmp/mac-$rid/Proton.app"
+            codesign --verify --strict "/tmp/mac-$rid/Proton.app"
+            (cd "/tmp/mac-$rid" && ditto -c -k --keepParent Proton.app "$GITHUB_WORKSPACE/dist/Proton-$VER-$short.zip")
+            (cd "/tmp/cli-$rid" && ditto -c -k . "$GITHUB_WORKSPACE/dist/proton-cli-$VER-$short.zip")
+          done
+          # Este servidor e Apple Silicon: o programa arm64 assinado tem de arrancar (um binario sem assinatura valida morria aqui).
+          out="$(/tmp/cli-osx-arm64/proton-cli version)"
+          echo "$out"
+          # O programa mostra a versao com quatro numeros (0.0.1 -> 0.0.1.0) e sem o sufixo de teste (0.0.0-test -> 0.0.0.0).
+          want="${VER%%-*}"
+          [[ "$out" == "proton-cli $want"* ]] || { echo "::error::proton-cli reports '$out', expected $want"; exit 1; }
+          ls -la ../dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02      # v4
+        with:
+          name: dist-mac
+          path: dist/
+
+  release:
+    needs: [versao, windows, mac]
+    if: needs.versao.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093      # v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+      - name: Publicar a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ needs.versao.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          notes="proton/releases/$VER.md"
+          [ -f "$notes" ] || { echo "::error::falta $notes"; exit 1; }
+          cd dist
+          ls -l
+          [ "$(ls Proton-*.zip proton-cli-*.zip | wc -l)" -eq 5 ] || { echo "::error::expected 5 zips"; exit 1; }
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+          gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --title "Proton $VER" --notes-file "$notes" --verify-tag

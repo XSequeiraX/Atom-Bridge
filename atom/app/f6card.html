@@ -135,7 +135,7 @@
         } catch (e) { msg(e.message, 'bad'); throw e; }
     }
 
-    async function status() {
+    async function cardStatus() {
         try {
             const s = await (await fetch('/api/devices/f6/card/status')).json();
             const st = $('st');
@@ -153,12 +153,12 @@
         } catch (e) {}
     }
     let _plErr = null;
-    setInterval(status, 1000); status();
+    setInterval(cardStatus, 1000); cardStatus();
     async function play(p) {
         const d = await call('/api/devices/f6/card/play', {path: p}).catch(() => null);
-        if (d) { msg('Playing ' + d.file + ' (' + dur(d.dur) + ')', 'ok'); status(); }
+        if (d) { msg('Playing ' + d.file + ' (' + dur(d.dur) + ')', 'ok'); cardStatus(); }
     }
-    async function stopPlay() { await call('/api/devices/f6/card/stop', {}).catch(() => null); status(); }
+    async function stopPlay() { await call('/api/devices/f6/card/stop', {}).catch(() => null); cardStatus(); }
 
     function tab(t) {
         $('takes').hidden = t !== 'takes'; $('files').hidden = t !== 'files';
@@ -182,7 +182,7 @@
             msg(rep.takes.length + ' takes on the card', 'ok');
             $('scanInfo').textContent = 'read ' + new Date(rep.at * 1000).toLocaleTimeString();
             drawTakes(rep);
-            status();
+            cardStatus();
         } catch (e) {} finally { b.disabled = false; }
     }
 

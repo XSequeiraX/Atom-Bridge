@@ -2,6 +2,7 @@
 # Passa o estado actual do main do repositorio privado para o publico (XSequeiraX/Atom-Bridge), sem o historico.
 #   bash ci/publicar.sh            mostra o que mudaria
 #   bash ci/publicar.sh --push     faz o commit no publico e envia
+#   PUBLICO_TAG=proton-v0.0.1 bash ci/publicar.sh --push   envia tambem essa tag (a do Proton arranca o fluxo da release)
 # O publico tem a sua propria historia, so a avancar (um commit por sincronizacao): os Atom actualizam-se sempre em
 # fast-forward. Corre-se no clone do repositorio privado, com o main em dia (git pull). PUBLICO_URL muda o destino;
 # PUBLICO_REF muda o que se publica (por omissao origin/main; por exemplo origin/o-meu-branch).
@@ -37,3 +38,8 @@ git -C "$T/pub" -c user.name="${GIT_AUTHOR_NAME:-$(git config user.name)}" -c us
     commit -q -m "Sincronizado com o privado $ORIGEM: $ASSUNTO"
 git -C "$T/pub" push -q origin HEAD:main
 echo "publicado: $(git -C "$T/pub" rev-parse --short HEAD) (origem $ORIGEM)"
+if [ -n "${PUBLICO_TAG:-}" ]; then
+    git -C "$T/pub" tag "$PUBLICO_TAG"
+    git -C "$T/pub" push -q origin "refs/tags/$PUBLICO_TAG"
+    echo "tag enviada: $PUBLICO_TAG"
+fi

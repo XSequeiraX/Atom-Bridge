@@ -70,3 +70,10 @@ tests/
 CrSDK_*/
 !/sdk/sony/CrSDK_*/
 atom/app/sony/modelos.inc
+
+# Proton (C#): os testes e os ficheiros de exemplo do contrato com o Atom entram (a regra tests/ de cima apanhava-os)
+!proton/tests/
+!proton/tests/**/Fixtures/*.json
+!proton/tests/**/Fixtures/*.csv
+proton/**/bin/
+proton/**/obj/

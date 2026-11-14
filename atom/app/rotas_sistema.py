@@ -23,6 +23,7 @@ from nucleo import (_take_ativos, AP_IFACE, BATTERY_WARN_PCT, CARD_WARN_SECS, DE
 
 
 AP_CON = _CONF.get("AP_CON") or "PS_Control"
+_ARRANQUE = time.monotonic()                # o bridge acabou de arrancar: a consola espera pelas primeiras ligacoes (uptime_s)
 
 
 def take_pendente_info():
@@ -498,6 +499,7 @@ def api_status():
     d["demo"] = demo_ligado()
     d["code_version"] = versao_instalada()
     d["bmpcc_via"] = "c3" if nucleo.c3_bm.ativo() else "bluez"
+    d["uptime_s"] = int(time.monotonic() - _ARRANQUE)
     d["anything_recording"] = anything_recording()      # o instalador espera por isto antes de reiniciar o bridge
     d["bmpcc_address"] = nucleo.CAMERA_ADDRESS if nucleo.BMPCC_ACTIVE else None
     d["drops_1h"] = {"bmpcc": quedas_na_hora("bmpcc")}

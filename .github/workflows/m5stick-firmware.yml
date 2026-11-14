@@ -1,0 +1,61 @@
+# Compila o firmware do comando de bolso do F6 (M5StickS3) para apanhar um erro de compilacao antes de alguem o gravar.
+# So compila: os .bin continuam a ser postos em firmware/m5stick/ e atom/app/fw/m5stick/ a mao (com a versao no nome).
+name: M5Stick firmware
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "_esp32_tools/m5stick_f6_remote/**"
+      - ".github/workflows/m5stick-firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # As versoes com que foi compilado (LEIA-ME.txt): placa generica ESP32-S3 com 8 MB de flash e USB nativo; a tabela de
+      # particoes e o partitions.csv da pasta do sketch (com a particao "cfg" do Wi-Fi).
+      FQBN: "esp32:esp32:esp32s3:CDCOnBoot=cdc,USBMode=hwcdc,FlashSize=8M,FlashMode=dio"
+      ESP32_CORE: "3.1.1"
+      M5UNIFIED: "0.2.27"
+      M5GFX: "0.2.34"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262      # v4
+      - name: arduino-cli
+        uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02      # v2.0.0
+      - name: Core e bibliotecas
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install "esp32:esp32@${ESP32_CORE}"
+          arduino-cli lib install "M5GFX@${M5GFX}" "M5Unified@${M5UNIFIED}"
+      - name: Compilar
+        run: |
+          set +e
+          arduino-cli compile --fqbn "$FQBN" --export-binaries --output-dir build _esp32_tools/m5stick_f6_remote > build.log 2>&1
+          rc=$?
+          tail -n 40 build.log
+          if [ $rc -ne 0 ]; then
+            grep -E "error|Error|ERROR|fatal|undefined reference|No such file" build.log | head -n 20 | while IFS= read -r l; do
+              l="${l//%/%25}"; l="${l//$'\r'/}"; echo "::error title=compile::${l:0:480}"
+            done
+            { echo '### Compile failed'; echo '```'; tail -n 60 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
+      - name: Verificar o .bin e a tabela de particoes
+        run: |
+          ls -l build
+          python3 - <<'PY'
+          d = open("build/m5stick_f6_remote.ino.bin", "rb").read()
+          assert d[:1] == b"\xe9" and len(d) > 100000, "not an ESP32 app image"
+          # a particao cfg tem de estar onde o gravar.py escreve o Wi-Fi (M5_CFG_OFFSET)
+          t = open("_esp32_tools/m5stick_f6_remote/partitions.csv").read()
+          assert any(l.split(",")[0].strip() == "cfg" and l.split(",")[3].strip().lower() == "0x310000"
+                     for l in t.splitlines() if l.strip() and not l.startswith("#")), "cfg partition is not at 0x310000"
+          print("ok", len(d), "bytes")
+          PY

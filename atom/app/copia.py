@@ -313,6 +313,26 @@ def guardar_na_pen(copia):
         return nome
 
 
+def guardar_takes_na_pen(exportado, csv_txt, dia=None):
+    """Escreve as takes (JSON e CSV, formato atom-takes/1) na pen, na pasta AtomBridge/: e o que o Proton le quando nao ha rede.
+    Devolve os nomes dos ficheiros."""
+    base = "atom-takes-%s" % ((dia or time.strftime("%Y-%m-%d")) + time.strftime("-%H%M%S"))
+    with Pen(escrever=True) as pasta:
+        destino = os.path.join(pasta, "AtomBridge")
+        os.makedirs(destino, exist_ok=True)
+        nomes = []
+        for ext, conteudo in (("json", json.dumps(exportado, indent=1, ensure_ascii=False)), ("csv", csv_txt)):
+            nome = "%s.%s" % (base, ext)
+            tmp = os.path.join(destino, nome + ".tmp")
+            with open(tmp, "w", encoding="utf-8", newline="") as f:
+                f.write(conteudo)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, os.path.join(destino, nome))
+            nomes.append(nome)
+        return nomes
+
+
 def listar_na_pen():
     with Pen() as pasta:
         out = []

@@ -1,7 +1,7 @@
 """Simulador da consola: corre o bridge-ctl.py num pseudo-terminal contra um bridge falso e devolve o ecra (pyte).
 
 Uso directo:  python3 ci/consola_sim.py 100x40 [cenario] [teclas...]
-  cenarios: termos (avisos de licenca por aceitar: a consola nao os pergunta) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet) | arranque (o bridge so responde ao fim de 6 s)
+  cenarios: termos (avisos de licenca por aceitar: a consola nao os pergunta) | normal | falhas (gateways e camaras em baixo) | rec (a gravar) | fim (acabou de parar: pagina de dados da take) | apext (AP externo na Ethernet) | arranque (o bridge so responde ao fim de 6 s) | ligar (a BMPCC e o C3 a ligar nos primeiros 8 s)
   teclas: texto literal, ou \\e=ESC, \\r=Enter, \\d=seta baixo, \\u=seta cima; !wait:N espera N s; !clear fecha a take
 Do ci/verificar.py: correr(cols, linhas, cenario, teclas) -> [linhas do ecra]. Nada fica fora de uma pasta temporaria.
 """
@@ -97,6 +97,10 @@ class H(http.server.BaseHTTPRequestHandler):
         if p == "/api/status":
             if CEN[0] == "arranque" and time.time() - T0[0] < 6:      # o bridge ainda a arrancar: o ecra de arranque espera
                 return self._send(503, {"error": "starting"})
+            if CEN[0] == "ligar":                                # o bridge responde mas a BMPCC e o C3 ainda estao a ligar
+                up = time.time() - T0[0]
+                st = dict(st, uptime_s=int(up), camera_connecting=up < 8, camera_connected=up >= 8)
+                st["c3_gateway"] = dict(st.get("c3_gateway") or {}, state="connecting" if up < 8 else "online")
             return self._send(200, st)
         if p == "/api/devices": return self._send(200, dv)
         if p == "/api/net/status": return self._send(200, net)

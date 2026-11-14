@@ -337,7 +337,7 @@ def api_gopros_gateway_remove():
     erro = _gw_parado(n, "removing the gateway")
     if erro:
         return erro
-    ids =[c for c, cam in nucleo.gofleet.cams.items() if cam.fleet.idx == n]
+    ids = [c for c, cam in list(nucleo.gofleet.cams.items()) if cam.fleet.idx == n]
     ok, err = nucleo.gofleet.remove_gateway(n)
     if ok:
         _alvos_tirar(ids)

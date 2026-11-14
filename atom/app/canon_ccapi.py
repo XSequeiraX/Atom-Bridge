@@ -604,18 +604,24 @@ class CanonCamera:
                 first = False
             if not self.state["connected"] or generation != self._poll_generation:
                 return
-            self.refresh_status()
+            # Este fio nao tem o vigiado: uma resposta inesperada da camara nao pode mata-lo (a Canon ficava "ligada" e
+            # parada no ultimo estado, REC incluido, ate se religar a mao).
+            try:
+                self.refresh_status()
+                # Periodic reality check on a take we think is running.
+                if self.state["recording"]:
+                    self._verify_count += 1
+                    if self._verify_count >= RECORDING_VERIFY_EVERY:
+                        self._verify_count = 0
+                        self._verificar_gravacao()
+                else:
+                    self._verify_count = 0
+            except Exception as e:                          # pylint: disable=broad-except
+                self._log("status refresh failed: %r" % e)
+                time.sleep(EVENT_POLL_ERROR_BACKOFF)
             # Rate-limit the cycle. Fast while it matters — recording, or a UI
             # client is watching — and much slower otherwise, so an idle rig
             # stops draining the camera for nothing.
-            # Periodic reality check on a take we think is running.
-            if self.state["recording"]:
-                self._verify_count += 1
-                if self._verify_count >= RECORDING_VERIFY_EVERY:
-                    self._verify_count = 0
-                    self._verificar_gravacao()
-            else:
-                self._verify_count = 0
 
             cycle = EVENT_POLL_MIN_CYCLE
             if not self.state["recording"] and activity_hint is not None:
@@ -1067,6 +1073,6 @@ def watchdog(interval=5):
     """
     while True:
         time.sleep(interval)
-        for cam in CAMERAS.values():
+        for cam in list(CAMERAS.values()):          # copia: acrescentar/tirar uma Canon a meio nao mata este fio
             if cam.state["connected"] and not cam._event_polling_supported:
                 cam.refresh_status()

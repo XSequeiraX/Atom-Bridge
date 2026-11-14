@@ -2748,7 +2748,6 @@
                 const i = REC_TARGETS.indexOf(t);
                 if (i >= 0) { REC_TARGETS.splice(i, 1); const b = document.getElementById('targetBtn_' + t); if (b) b.remove(); }
             });
-            const row = document.getElementById('recTargetRow');
             _recTargets = d.targets.filter(x => REC_TARGETS.includes(x));
             paintRecTargets(_recTargets);
             updateRecAllButton();
@@ -2937,7 +2936,6 @@
         const lat = (ctx.outputLatency || ctx.baseLatency || 0) + slateVisOffsetMs() / 1000;
         const PAINT = 0.017;
         const fired = {shown: -1, flash: false};
-        const started = performance.now();
         const flash = async () => {
             if (fired.flash) return;
             fired.flash = true;

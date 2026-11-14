@@ -42,6 +42,10 @@ CONSOLA = [
     # Ao arrancar, enquanto o bridge nao responde: o ecra de arranque, e so depois o dashboard (que nao aparece meio vazio).
     ("ecra de arranque", "100x30", "arranque", [], ["ATOM BRIDGE", "Loading", "[ ] bridge"], ["GATEWAYS", "REC  VIA"]),
     ("arranque acaba no dashboard", "100x40", "arranque", ["!wait:6"], ["GATEWAYS", "REC  VIA"], ["Loading"]),
+    # O bridge ja responde mas as primeiras ligacoes ainda correm: o ecra de arranque diz quem falta e so depois abre.
+    ("arranque espera pelas ligacoes", "100x30", "ligar", [], ["Loading", "[ ] first connections", "connecting: BMPCC", "gateways: C3"],
+     ["GATEWAYS", "REC  VIA"]),
+    ("ligacoes feitas: dashboard", "100x40", "ligar", ["!wait:25"], ["GATEWAYS", "REC  VIA"], ["Loading"]),
     ("assistente: passo Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9,
      ["10/18   Sony", "Sony helper: running", "A7 IV", "ILCE-7M4  battery 64%", "card 1h10m"]),
     ("assistente: TC das Sony", "100x40", "normal", ["\\e", "1"] + ["s"] * 9 + ["\\r", "!wait:2"],
@@ -586,6 +590,89 @@ def ap_cameras_ligadas():
     return erros
 
 
+def takes_exportadas():
+    """O shoot log por take e camara (atom-takes/1, que o Proton le): inicio, fim, timecode, clip e veredicto de cada camara,
+    uma camara que falha, uma take aberta, o filtro por dia e a mesma numeracao noutro dia."""
+    import json
+    sys.path.insert(0, os.path.join(RAIZ, "atom", "app"))
+    import takes_export as te
+    erros = []
+
+    def l(ts, fonte, acao, nota="", take="1", name="Dia 1", alias="", clip=""):
+        return {"timestamp": ts, "source": fonte, "alias": alias, "action": acao, "note": nota, "name": name, "take": take,
+                "clip": clip, "av": "4.0" if acao == "start" and fonte == "R5" else "", "tv": "", "iso": "", "shutter_mode": "",
+                "movie_quality": ""}
+    linhas = [
+        l("2026-11-09 10:00:00", "BMPCC", "start", "TC 10:00:00:00", alias="A"),
+        l("2026-11-09 10:00:01", "R5", "start", "TC 10:00:01:00", alias="B"),
+        l("2026-11-09 10:00:02", "F6", "start", "10:00:02:00 | "),
+        l("2026-11-09 10:01:00", "BMPCC", "stop", "TC 10:01:00:00", alias="A"),
+        l("2026-11-09 10:01:01", "R5", "stop", "TC 10:01:01:00", alias="B", clip="MVI_0001.MP4"),
+        l("2026-11-09 10:01:02", "F6", "stop"),
+        l("2026-11-09 10:01:05", "MARK", "good", "TC 10:01:05:00 | boa"),
+        l("2026-11-09 10:01:06", "SYSTEM", "note", "TC 10:01:06:00 | nota solta"),
+        l("2026-11-09 10:10:00", "BMPCC", "start", "TC 10:10:00:00", take="2", alias="A"),
+        l("2026-11-09 10:10:30", "BMPCC", "fault", "link lost while recording", take="2", alias="A"),
+        l("2026-11-09 10:11:00", "R5", "start", "TC 10:11:00:00", take="2", alias="B"),          # a R5 ainda grava: take aberta
+        l("2026-11-10 09:00:00", "BMPCC", "start", "TC 09:00:00:00", take="1", alias="A"),       # a mesma numeracao noutro dia
+        l("2026-11-10 09:01:00", "BMPCC", "stop", "TC 09:01:00:00", take="1", alias="A", clip="A001.braw"),
+        {"timestamp": "lixo", "source": "X", "action": "start", "take": "9"},                     # linhas estragadas nao rebentam
+    ]
+    d = te.exportar(linhas, atom="atom")
+    json.dumps(d)
+    t = d["takes"]
+    if d["format"] != "atom-takes/1" or [(x["day"], x["take"]) for x in t] != [("2026-11-09", 1), ("2026-11-09", 2), ("2026-11-10", 1)]:
+        erros.append("devia dar 3 takes (a numeracao 1 noutro dia e outra take): %r" % [(x["day"], x["take"]) for x in t])
+        return erros
+    a = t[0]
+    cams = {c["source"]: c for c in a["cameras"]}
+    if sorted(cams) != ["BMPCC", "F6", "R5"] or a["verdict"] != "good" or a["open"] or a["end"] != "2026-11-09 10:01:02":
+        erros.append("take 1: camaras, veredicto e fim: %r" % {k: a[k] for k in ("verdict", "open", "end")})
+    if cams["BMPCC"]["tc_start"] != "10:00:00:00" or cams["BMPCC"]["tc_stop"] != "10:01:00:00" or cams["F6"]["tc_start"] != "10:00:02:00":
+        erros.append("timecodes da take 1: %r" % {k: (c["tc_start"], c["tc_stop"]) for k, c in cams.items()})
+    if cams["R5"]["clip"] != "MVI_0001.MP4" or cams["R5"]["settings"] != {"av": "4.0"} or a["tc_start"] != "10:00:00:00":
+        erros.append("clip, definicoes e tc da take 1: %r" % cams["R5"])
+    if any(n["kind"] == "note" and "solta" in n["text"] for n in a["notes"]) is False:
+        erros.append("a nota da take devia estar nas notas: %r" % a["notes"])
+    b = t[1]
+    if not b["open"] or b["end"] is not None or not {c["source"]: c for c in b["cameras"]}["BMPCC"]["fault"]:
+        erros.append("take 2: aberta (a R5 nao parou) e com falha na BMPCC: %r" % {k: b[k] for k in ("open", "end")})
+    if [x["take"] for x in te.exportar(linhas, day="2026-11-10")["takes"]] != [1]:
+        erros.append("o filtro por dia devia trazer so a take 1 de 2026-11-10")
+    # O contrato com o Proton (C#): o fixture que os testes dele leem tem de ser exactamente o que este modulo produz.
+    fx = os.path.join(RAIZ, "proton", "tests", "Proton.Tests", "Fixtures")
+    if os.path.isdir(fx):
+        try:
+            atual = json.load(open(os.path.join(fx, "atom-takes.json")))
+            if atual.get("format") != te.FORMATO or atual.get("fps") != 25 or [x["take"] for x in atual["takes"]] != [1, 2]:
+                erros.append("proton/.../atom-takes.json (fixture) deixou de bater com o formato %s" % te.FORMATO)
+            if open(os.path.join(fx, "atom-takes.csv"), newline="").read() != te.para_csv(atual):
+                erros.append("proton/.../atom-takes.csv (fixture) deixou de ser o CSV que o Atom escreve para o atom-takes.json")
+        except (OSError, ValueError) as e:
+            erros.append("fixture do Proton: %s" % e)
+    # As takes para a pen (exFAT): ficheiros em AtomBridge/, escrita atomica, JSON e CSV iguais ao que a rota da rede da
+    import copia
+    pasta = tempfile.mkdtemp(prefix="pen-")
+    try:
+        copia.pens = lambda lsblk_json=None: [{"dev": "/dev/sdz1", "label": "EXFAT", "fstype": "exfat", "mountpoint": pasta}]
+        nomes = copia.guardar_takes_na_pen(d, te.para_csv(d), "2026-11-09")
+        if sorted(n.rsplit(".", 1)[1] for n in nomes) != ["csv", "json"] or not all(n.startswith("atom-takes-2026-11-09-") for n in nomes):
+            erros.append("nomes dos ficheiros na pen: %r" % nomes)
+        dentro = sorted(os.listdir(os.path.join(pasta, "AtomBridge")))
+        if dentro != sorted(nomes):
+            erros.append("a pasta AtomBridge/ da pen devia ter so os dois ficheiros (sem .tmp): %r" % dentro)
+        else:
+            lido = json.load(open(os.path.join(pasta, "AtomBridge", [n for n in nomes if n.endswith(".json")][0])))
+            if lido["format"] != te.FORMATO or len(lido["takes"]) != 3:
+                erros.append("o JSON na pen devia ser o export (3 takes): %r" % lido.get("format"))
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+    csv_txt = te.para_csv(d).splitlines()
+    if csv_txt[0] != ",".join(te.CSV_COLUNAS) or len(csv_txt) != 1 + 3 + 2 + 1:
+        erros.append("o CSV devia ter o cabecalho e uma linha por take e camara (6): %r" % csv_txt)
+    return erros
+
+
 def erros_curtos():
     """Os erros de rede chegam curtos a consola, a pagina e ao registo (issue #34), com as mensagens reais das bibliotecas;
     a copia do bridge-ctl.py da o mesmo que o atom/app/curto.py."""
@@ -845,6 +932,7 @@ if __name__ == "__main__":
                     ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces),
                     ("Portas Ethernet: listar e renomear", portas_ethernet),
                     ("Avisos de licenca: so no instalador", avisos_instalador),
-                    ("AP: cameras ligadas (reserva ou IP)", ap_cameras_ligadas)):
+                    ("AP: cameras ligadas (reserva ou IP)", ap_cameras_ligadas),
+                    ("Takes por camara (atom-takes/1)", takes_exportadas)):
         ok = grupo(nome, f()) and ok
     sys.exit(0 if ok else 1)

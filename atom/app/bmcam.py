@@ -740,13 +740,13 @@ class Fleet:
         return self.cams.get(cid)
 
     def in_targets(self, targets):
-        return [c for cid, c in self.cams.items() if cid in (targets or [])]
+        return [c for cid, c in list(self.cams.items()) if cid in (targets or [])]
 
     def any_running(self):
-        return any(c.running() for c in self.cams.values())
+        return any(c.running() for c in list(self.cams.values()))
 
     def status(self):
-        return {cid: c.status() for cid, c in self.cams.items()}
+        return {cid: c.status() for cid, c in list(self.cams.items())}
 
     def add(self, name, host, port=4444):
         with self._lock:

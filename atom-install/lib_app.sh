@@ -149,7 +149,8 @@ eth_link() {
 # e segue (as Sony ficam por acrescentar ate se aceitar). Como o PIN, o aceite fica num ficheiro temporario ($TERMOS_NOVO) e o
 # passo 7 poe-no em $opt (termos_instalar).
 termos_da_instalacao() {
-    local opt="${1:-$OPT}" app="${2:-$opt}" nova="${3:-0}" tmp r
+    local opt="${1:-$OPT}"
+    local app="${2:-$opt}" nova="${3:-0}" tmp r
     TERMOS_NOVO=""
     [ -s "$opt/termos.json" ] && return 0
     [ -f "$app/licencas.py" ] || return 0
