@@ -14,7 +14,8 @@ notas de cada versão (os avisos do Windows e do Mac na primeira vez, o que est�
 
 **Fazer uma release:** com o main em dia, `PUBLICO_TAG=proton-vX.Y.Z bash ci/publicar.sh --push` (escreve antes `proton/releases/X.Y.Z.md`).
 A tag no repositório público arranca o fluxo `proton-release.yml`: testa nos três sistemas, compila, assina no Mac (assinatura local) e
-publica os zips e o `SHA256SUMS.txt`.
+publica os zips e o `SHA256SUMS.txt`. Sem enviar a tag (alguns ambientes não deixam): no GitHub, **Actions > Proton release > Run
+workflow**, no `main`, com a versão (`X.Y.Z`) e **publish** ligado, que cria a tag e a release.
 
 ## Estado
 

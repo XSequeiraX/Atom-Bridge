@@ -40,6 +40,10 @@ git -C "$T/pub" push -q origin HEAD:main
 echo "publicado: $(git -C "$T/pub" rev-parse --short HEAD) (origem $ORIGEM)"
 if [ -n "${PUBLICO_TAG:-}" ]; then
     git -C "$T/pub" tag "$PUBLICO_TAG"
-    git -C "$T/pub" push -q origin "refs/tags/$PUBLICO_TAG"
-    echo "tag enviada: $PUBLICO_TAG"
+    if git -C "$T/pub" push -q origin "refs/tags/$PUBLICO_TAG"; then
+        echo "tag enviada: $PUBLICO_TAG"
+    else
+        echo "AVISO: o codigo foi publicado mas a tag nao seguiu (alguns ambientes nao deixam enviar tags)."
+        echo "       No GitHub: Actions > Proton release > Run workflow, no main, com a versao e publish ligado."
+    fi
 fi

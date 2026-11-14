@@ -1,8 +1,10 @@
 name: Proton release
 
-# Uma release do Proton (o companion de Windows e Mac): empurrar a tag  proton-v<versao>  (por exemplo proton-v0.0.1) compila, testa e
-# publica os ficheiros para descarregar. Nos ramos de trabalho so compila (sem publicar), para se ver que a release vai dar.
-# A versao vem da tag; as notas vem de proton/releases/<versao>.md.
+# Uma release do Proton (o companion de Windows e Mac), de duas maneiras:
+#   - empurrar a tag  proton-v<versao>  (por exemplo proton-v0.0.1), ou
+#   - no GitHub: Actions > Proton release > Run workflow, no main, com a versao (0.0.1) e "publish" ligado: cria a tag e a release.
+# Compila, testa nos tres sistemas e publica os ficheiros para descarregar. Nos ramos de trabalho (e sem "publish") so compila, para
+# se ver que a release vai dar. As notas vem de proton/releases/<versao>.md.
 on:
   push:
     tags: ["proton-v*"]
@@ -11,6 +13,15 @@ on:
       - ".github/workflows/proton-release.yml"
       - "proton/packaging/**"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versao a publicar (X.Y.Z), so com publish ligado"
+        required: false
+        default: ""
+      publish:
+        description: "Publicar a release (so a partir do main). Desligado: so compila"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,8 +37,17 @@ jobs:
       publish: ${{ steps.v.outputs.publish }}
     steps:
       - id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_PUBLISH: ${{ inputs.publish }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/proton-v* ]]; then
+          if [[ "$EVENT" == workflow_dispatch && "$IN_PUBLISH" == "true" ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::publish only from main (this is $GITHUB_REF)"; exit 1; }
+            v="$IN_VERSION"
+            [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version '$v': expected X.Y.Z"; exit 1; }
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/proton-v* ]]; then
             v="${GITHUB_REF#refs/tags/proton-v}"
             [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag $GITHUB_REF: expected proton-vX.Y.Z"; exit 1; }
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -139,7 +159,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.versao.outputs.version }}
-          TAG: ${{ github.ref_name }}
         run: |
           set -e
           notes="proton/releases/$VER.md"
@@ -150,4 +169,5 @@ jobs:
           sha256sum *.zip > SHA256SUMS.txt
           cat SHA256SUMS.txt
           cd ..
-          gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --title "Proton $VER" --notes-file "$notes" --verify-tag
+          # Com a tag ja empurrada usa-a; sem ela, o GitHub cria-a neste commit.
+          gh release create "proton-v$VER" dist/*.zip dist/SHA256SUMS.txt --title "Proton $VER" --notes-file "$notes" --target "$GITHUB_SHA"
