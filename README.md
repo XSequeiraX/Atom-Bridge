@@ -118,6 +118,9 @@ dá 404, uma ação que o tipo não tem dá 409. Todo o POST e todo o erro respo
 
 ## Instalar e atualizar
 
+**Tutorial passo a passo: [`docs/INSTALAR.md`](docs/INSTALAR.md)** (o que precisas, o Debian, as perguntas do instalador, o primeiro
+arranque, abrir a página, atualizar e o que fazer se algo falhar). Em resumo:
+
 Instalação (Atom com Debian): copiar o repositório e correr, como root:
 
 ```bash
