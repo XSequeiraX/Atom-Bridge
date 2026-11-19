@@ -593,7 +593,7 @@ def bt_parse_device(linha, achados):
 
 
 # Onde ficam as ordens dos menus. Um sitio so, igual para qualquer utilizador que corra a
-# consola (a do tty1 corre como root, a do SSH como sequeira): senao cada um tinha o seu
+# consola (a do tty1 corre como root, a do SSH como o utilizador do SSH): senao cada um tinha o seu
 # ficheiro e a ordem "desaparecia" ao reiniciar. Se /var/lib nao for gravavel, usa o HOME.
 MENUS_DIR = os.environ.get("BRIDGE_CTL_MENUS", "/var/lib/bridge-ctl")   # os testes (ci/) apontam para uma pasta temporaria
 MENUS_HOME = os.path.join(os.path.expanduser("~"), ".bridge-ctl-menus.json")
@@ -721,7 +721,7 @@ def _menus_gravar(novos):
             pasta = os.path.dirname(caminho)
             if pasta == MENUS_DIR and not os.path.isdir(pasta):
                 os.makedirs(pasta, exist_ok=True)
-                os.chmod(pasta, 0o777)               # partilhada: root e sequeira escrevem
+                os.chmod(pasta, 0o777)               # partilhada: root e o utilizador do SSH escrevem
             tmp = caminho + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(d, f, indent=1)

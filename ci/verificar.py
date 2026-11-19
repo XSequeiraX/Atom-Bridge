@@ -433,6 +433,35 @@ def nomes_interfaces():
     return erros
 
 
+def utilizador_instalador():
+    """O instalador nao assume o nome de nenhuma pessoa: o utilizador do Atom vem do ambiente (ATOM_USER, KIOSK_USER), de quem chamou o
+    sudo, ou do dono do clone (a actualizacao pela consola corre como servico, sem SUDO_USER); vazio se nao se sabe."""
+    import pwd
+    erros = []
+    lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+    for f in ("atom-install/install_atom.sh", "atom-install/lib_app.sh", "atom/app/rotas_sistema.py", "bridge-ctl.py"):
+        if "sequeira" in open(os.path.join(RAIZ, f), encoding="utf-8").read().replace("XSequeiraX", ""):
+            erros.append("%s tem o nome de um utilizador escrito no codigo" % f)
+    tmp = tempfile.mkdtemp(prefix="utilizador-")
+    dono = pwd.getpwuid(os.stat(tmp).st_uid).pw_name
+
+    def quem(env, pasta=tmp):
+        e = {k: v for k, v in os.environ.items() if k not in ("ATOM_USER", "KIOSK_USER", "SUDO_USER")}
+        e.update(env)
+        r = subprocess.run(["bash", "-c", '. "$0"; utilizador_do_atom "$1"', lib, pasta], capture_output=True, text=True, env=e, timeout=20)
+        return r.stdout
+    for env, quer, porque in (({"SUDO_USER": "maria"}, "maria", "quem chamou o sudo"),
+                              ({"ATOM_USER": "joao", "SUDO_USER": "maria"}, "joao", "ATOM_USER ganha ao SUDO_USER"),
+                              ({"KIOSK_USER": "pedro"}, "pedro", "o KIOSK_USER antigo"),
+                              ({}, dono, "sem ambiente: o dono do clone (a actualizacao corre como servico)")):
+        if quem(env) != quer:
+            erros.append("utilizador do Atom (%s): esperava %r, deu %r" % (porque, quer, quem(env)))
+    if quem({}, os.path.join(tmp, "nao-existe")) != "":
+        erros.append("sem ambiente e sem clone devia ficar vazio")
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
 def instalacao_nova():
     """Uma instalacao nova comeca sem aparelhos (nenhuma Canon, telemovel, S3 nem endereco da BMPCC de fabrica no codigo) e um Atom
     que ja corria fica com o que tinha (padroes.py escreve-o nos ficheiros do operador, uma so vez)."""
@@ -1049,6 +1078,7 @@ if __name__ == "__main__":
                     ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces),
                     ("Portas Ethernet: listar e renomear", portas_ethernet),
                     ("Instalacao nova sem aparelhos", instalacao_nova),
+                    ("Instalador: utilizador do Atom", utilizador_instalador),
                     ("Avisos de licenca: so no instalador", avisos_instalador),
                     ("AP: cameras ligadas (reserva ou IP)", ap_cameras_ligadas),
                     ("Takes por camara (atom-takes/1)", takes_exportadas)):

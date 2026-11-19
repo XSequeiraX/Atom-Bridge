@@ -1233,7 +1233,7 @@ def _repo_da_instalacao():
     for p in sorted(glob.glob("/home/*/Atom-Bridge") + glob.glob("/home/*/Bridge-Control")):
         if os.path.isdir(os.path.join(p, ".git")):
             return p
-    return "/home/sequeira/Atom-Bridge"
+    return "/root/Atom-Bridge"                 # nao ha clone: o erro diz onde o procurou
 
 
 UPDATE_REPO = _repo_da_instalacao()
@@ -1281,7 +1281,8 @@ def api_system_update_check():
             linhas = []
         return jsonify({"ok": True, "running": _update_a_correr(), "log": linhas})
     if not os.path.isdir(os.path.join(UPDATE_REPO, ".git")):
-        return jsonify({"ok": False, "error": f"no git clone at {UPDATE_REPO}"}), 500
+        return jsonify({"ok": False, "error": f"no git clone of the repository found (looked at {UPDATE_REPO}): clone "
+                                              "https://github.com/XSequeiraX/Atom-Bridge and run atom-install/install_atom.sh from it"}), 500
     try:
         # Um clone que veio de outro repositorio (o antigo, privado) passa a seguir o publico, como o atualizar_atom.sh faz.
         _update_git("remote", "set-url", "origin", UPDATE_URL)

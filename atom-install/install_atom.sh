@@ -7,7 +7,7 @@
 #   sudo bash install_atom.sh                          # so aplica o que falta
 #
 # Variaveis opcionais:
-#   ATOM_USER       o utilizador do Atom (por defeito quem chamou o sudo)
+#   ATOM_USER       o utilizador do Atom (por defeito quem chamou o sudo; senao o dono do clone). So serve para fechar o PipeWire dele
 #   AP_SSID         nome do AP das cameras; se faltar, e pedido
 #   WEB_PIN         PIN da pagina web (4 a 12 digitos); OBRIGATORIO numa instalacao nova: se faltar, e pedido (num terminal)
 #   ACCEPT_LICENSES=yes  aceita os avisos de licenca (todos os SDK e afins) sem perguntar; OBRIGATORIO numa instalacao nova
@@ -23,7 +23,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OPT=/opt/camera-bridge
-ATOM_USER="${ATOM_USER:-${KIOSK_USER:-${SUDO_USER:-sequeira}}}"
+ATOM_EXPLICITO="${ATOM_USER:-${KIOSK_USER:-}}"      # dado de proposito (ambiente): tem de existir
 PORT=8080
 # Nomes fixos dos dois radios Wi-Fi: pedidos numa instalacao nova, logo a seguir ao PIN (nomes_interfaces em lib_app.sh).
 UP_NAME="${UP_NAME:-}"
@@ -38,7 +38,11 @@ step() { echo; echo "=== $* ==="; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "run it with sudo"
-id "$ATOM_USER" >/dev/null 2>&1 || die "user '$ATOM_USER' does not exist"
+ATOM_USER="$(utilizador_do_atom "$HERE")"
+if [ -n "$ATOM_USER" ] && ! id "$ATOM_USER" >/dev/null 2>&1; then
+    [ -z "$ATOM_EXPLICITO" ] || die "user '$ATOM_USER' does not exist"
+    ATOM_USER=""                       # deduzido e inexistente: nao ha PipeWire de ninguem para fechar
+fi
 [ -f "$APP/bridge.py" ] || die "no bridge code in $APP (run the installer from the repository clone)"
 
 # Os avisos de licenca: uma vez, na primeira instalacao (obrigatorio); depois nada volta a perguntar.
@@ -358,9 +362,11 @@ step "6/7 Sound and boot menu"
 # cartao e bloqueava o arranque.
 systemctl --global mask pipewire.service pipewire.socket pipewire-pulse.service \
     pipewire-pulse.socket wireplumber.service filter-chain.service >/dev/null 2>&1 || true
-pkill -u "$ATOM_USER" -x pipewire 2>/dev/null || true
-pkill -u "$ATOM_USER" -x pipewire-pulse 2>/dev/null || true
-pkill -u "$ATOM_USER" -x wireplumber 2>/dev/null || true
+if [ -n "$ATOM_USER" ]; then
+    pkill -u "$ATOM_USER" -x pipewire 2>/dev/null || true
+    pkill -u "$ATOM_USER" -x pipewire-pulse 2>/dev/null || true
+    pkill -u "$ATOM_USER" -x wireplumber 2>/dev/null || true
+fi
 
 # O quiosque (Xorg + surf no ecra do Atom) saiu a 2026-10-15: era o que mais pesava no Atom, e a consola faz o mesmo.
 # Num Atom que o tinha, tira-se tudo: o servico, os scripts, a configuracao do X e os pacotes (o WebKit e o X sao

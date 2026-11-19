@@ -52,6 +52,15 @@ pin_da_pagina() {
     return 0
 }
 
+# O utilizador do Atom (so serve para fechar o PipeWire dele: o ADC do LTC e para o bridge). Nunca um nome escrito no codigo:
+# ATOM_USER (ou o antigo KIOSK_USER) se vier no ambiente; senao quem chamou o sudo; senao o dono da pasta do clone (a
+# actualizacao pela consola ou pela pagina corre como servico, sem SUDO_USER). Vazio se nao se sabe. $1: a pasta do clone.
+utilizador_do_atom() {
+    local u="${ATOM_USER:-${KIOSK_USER:-${SUDO_USER:-}}}"
+    [ -n "$u" ] || u="$(stat -c %U "$1" 2>/dev/null || true)"
+    printf '%s' "$u"
+}
+
 # As duas interfaces Wi-Fi que o instalador conhece: o dongle AR9271 do AP das cameras (driver ath9k_htc) e o outro radio Wi-Fi da
 # maquina (o uplink, internet). Dizem o nome que o sistema lhes da agora, ou nada se nao ha. (SYS_NET_DIR: os testes.)
 wifi_ap_iface() {
