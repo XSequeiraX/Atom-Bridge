@@ -52,9 +52,30 @@ pin_da_pagina() {
     return 0
 }
 
+# As duas interfaces Wi-Fi que o instalador conhece: o dongle AR9271 do AP das cameras (driver ath9k_htc) e o outro radio Wi-Fi da
+# maquina (o uplink, internet). Dizem o nome que o sistema lhes da agora, ou nada se nao ha. (SYS_NET_DIR: os testes.)
+wifi_ap_iface() {
+    local d
+    for d in "${SYS_NET_DIR:-/sys/class/net}"/*; do
+        [ "$(basename "$(readlink -f "$d/device/driver" 2>/dev/null)")" = ath9k_htc ] && { basename "$d"; return 0; }
+    done
+    return 0
+}
+wifi_up_iface() {
+    local ap d n
+    ap="$(wifi_ap_iface)"
+    for d in "${SYS_NET_DIR:-/sys/class/net}"/*; do
+        n="$(basename "$d")"
+        [ -d "$d/wireless" ] && [ "$n" != "$ap" ] && { echo "$n"; return 0; }
+    done
+    return 0
+}
+
 # Os nomes fixos das duas interfaces Wi-Fi: UP_NAME (o radio interno, o uplink) e AP_NAME (o dongle AR9271 do AP das cameras).
+# Nenhum nome e assumido: sem escolha, a interface fica com o nome que o sistema lhe da (o instalador usa-o no passo 3).
 # Por ordem: o que vier no ambiente (UP_NAME=... AP_NAME=...), o que ja esta no ap.conf (uma actualizacao nunca os muda nem
-# pergunta), e numa instalacao nova num terminal pergunta-se (Enter fica com o sugerido). Sem terminal: os de sempre.
+# pergunta), e numa instalacao nova num terminal pergunta-se, mas so por uma interface que existe (Enter fica com o nome actual:
+# sem dongle nao se pergunta pelo dongle). Sem terminal: ficam os nomes do sistema.
 # Um nome valido: 1 a 15 caracteres (limite do kernel), comeca por letra, so letras, digitos, _ e -; nao wlanN nem ethN (os nomes
 # que o kernel da sozinho e que podem chocar no arranque); os dois diferentes.
 nome_iface_ok() {
@@ -62,29 +83,31 @@ nome_iface_ok() {
     [ "${#1}" -le 15 ] && printf '%s' "$1" | grep -Eq '^[A-Za-z][A-Za-z0-9_-]*$'
 }
 nomes_interfaces() {
-    local opt="${1:-$OPT}" nova="${2:-0}" conf v
+    local opt="${1:-$OPT}" nova="${2:-0}" conf v up_if ap_if
     conf="$opt/ap.conf"
     if [ -z "${UP_NAME:-}" ] && [ -f "$conf" ]; then UP_NAME="$(sed -n 's/^UP_IF=//p' "$conf" | head -n1)"; fi
     if [ -z "${AP_NAME:-}" ] && [ -f "$conf" ]; then AP_NAME="$(sed -n 's/^AP_IF=//p' "$conf" | head -n1)"; fi
     if [ "$nova" = 1 ] && [ -t 0 ]; then
-        while [ -z "${UP_NAME:-}" ]; do
-            read -rp "Name for the internal Wi-Fi (the uplink, internet) [ps-uplink]: " v
-            v="${v:-ps-uplink}"
+        up_if="$(wifi_up_iface)"
+        ap_if="$(wifi_ap_iface)"
+        while [ -n "$up_if" ] && [ -z "${UP_NAME:-}" ]; do
+            read -rp "Fixed name for the internal Wi-Fi $up_if (the uplink, internet); Enter keeps $up_if: " v || v=""
+            [ -n "$v" ] || break
             if nome_iface_ok "$v"; then UP_NAME="$v"; else echo "  1 to 15 characters: letters, digits, _ and -, starting with a letter (not wlanN/ethN)"; fi
         done
-        while [ -z "${AP_NAME:-}" ]; do
-            read -rp "Name for the USB dongle (the cameras' AP) [ps-control]: " v
-            v="${v:-ps-control}"
+        while [ -n "$ap_if" ] && [ -z "${AP_NAME:-}" ]; do
+            read -rp "Fixed name for the USB dongle $ap_if (the cameras' AP); Enter keeps $ap_if: " v || v=""
+            [ -n "$v" ] || break
             if ! nome_iface_ok "$v"; then echo "  1 to 15 characters: letters, digits, _ and -, starting with a letter (not wlanN/ethN)"
-            elif [ "$v" = "$UP_NAME" ]; then echo "  it must be different from the uplink name ($UP_NAME)"
+            elif [ "$v" = "${UP_NAME:-}" ]; then echo "  it must be different from the uplink name ($UP_NAME)"
             else AP_NAME="$v"; fi
         done
     fi
-    UP_NAME="${UP_NAME:-ps-uplink}"
-    AP_NAME="${AP_NAME:-ps-control}"
-    nome_iface_ok "$UP_NAME" || { echo "ERROR: invalid uplink interface name '$UP_NAME'" >&2; return 1; }
-    nome_iface_ok "$AP_NAME" || { echo "ERROR: invalid AP interface name '$AP_NAME'" >&2; return 1; }
-    [ "$UP_NAME" != "$AP_NAME" ] || { echo "ERROR: the two interfaces need different names ($UP_NAME)" >&2; return 1; }
+    UP_NAME="${UP_NAME:-}"
+    AP_NAME="${AP_NAME:-}"
+    [ -z "$UP_NAME" ] || nome_iface_ok "$UP_NAME" || { echo "ERROR: invalid uplink interface name '$UP_NAME'" >&2; return 1; }
+    [ -z "$AP_NAME" ] || nome_iface_ok "$AP_NAME" || { echo "ERROR: invalid AP interface name '$AP_NAME'" >&2; return 1; }
+    [ -z "$UP_NAME" ] || [ "$UP_NAME" != "$AP_NAME" ] || { echo "ERROR: the two interfaces need different names ($UP_NAME)" >&2; return 1; }
     return 0
 }
 

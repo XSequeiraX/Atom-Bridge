@@ -8,7 +8,8 @@ recusas do bridge (a gravar, sem rede, ...) aparecem tal como ele as diz.
 
 Ecra principal
   cima/baixo  escolher a linha: devices, F6 e GATEWAYS (sem fim: da ultima volta a primeira)
-  esq/dir     vista da lista: STATE, IMAGE (definicoes), NETWORK (ligacao e sinal), TAKE (ultima take e clip). Fica guardada
+  esq/dir     vistas da lista: STATE, IMAGE (definicoes), NETWORK (ligacao e sinal), TAKE (ultima take e clip). Num ecra largo
+              veem-se todas ao mesmo tempo; num estreito as que couberem, e as setas mudam a primeira ("< more >"). Fica guardada
   ESPACO      alvo do REC (liga/desliga)       A  todas as camaras alvo
   R           REC / parar nos alvos            T  REC / parar so no device escolhido
   G / N / M   marca good / no-good / mark no shoot log (sem perguntas)
@@ -103,6 +104,10 @@ VISTA_CAB = {
 # As colunas do dashboard (x): REC 0, VIA 6, DEVICE 11 (NOME_W + 1), depois o estado e as colunas de cada vista.
 COL_ESTADO = 11 + NOME_W + 2
 COL_V = COL_ESTADO + 12                 # onde comeca a primeira coluna de cada vista (BATT, MODE, LINK, TAKE)
+# Quanto cada vista ocupa no dashboard: (largura minima, desejada, maxima). Mostram-se lado a lado as que couberem (todas num
+# ecra largo); as de texto livre (o das definicoes e o da ligacao) encolhem ate ao minimo para caber mais uma e crescem ate ao
+# maximo quando sobra largura.
+DASH_COLS = {"STATE": (28, 28, 28), "IMAGE": (22, 32, 40), "NETWORK": (14, 23, 34), "TAKE": (28, 28, 28)}
 # Ajuda (tecla F1 ou ?, e ESC > HELP): texto estatico, nao precisa do bridge. O ecra principal e os menus so dizem o
 # que e verdade; os "como fazer" e as explicacoes vivem aqui. Cada pagina: (titulo, linhas) -- uma linha e um texto ou
 # (texto, cor). Largura <= 76 colunas (cabe em 80x24).
@@ -2560,12 +2565,17 @@ class Ui:
                          if idade_cn is not None else "no device data yet", self.attr("yellow"))
 
         y = y_falha + 1
-        self.put(y, 0, (" REC  VIA  %-" + str(NOME_W + 2) + "s%-12s") % ("DEVICE", "STATE") + VISTA_CAB[self.vista], self.attr("dim"))
-        self.put(y, w - len(self.vista) - 5, "< %s >" % self.vista, self.attr("cyan") | curses.A_BOLD)
+        colunas = self.vistas_visiveis(w)
+        self.put(y, 0, (" REC  VIA  %-" + str(NOME_W + 2) + "s%-12s") % ("DEVICE", "STATE"), self.attr("dim"))
+        for v, x, lw in colunas:
+            self.put(y, x, VISTA_CAB[v][:lw], self.attr("dim"))
+        # Quando nao cabem todas as vistas, as setas esquerda/direita mudam a primeira (as que se veem estao nos cabecalhos).
+        if len(colunas) < len(VISTAS):
+            self.put(y, w - 10, "< more >", self.attr("cyan") | curses.A_BOLD)
         # A legenda: os transportes em uso, cada um na sua cor (as marcas de cada linha usam as mesmas).
-        xl = COL_V + 16 + 10 + 2 if self.vista == "STATE" else 0
+        xl = colunas[-1][1] + len(VISTA_CAB[colunas[-1][0]]) + 3
         for chave, marca in dict.fromkeys(r["via"] for r in self.rows if r.get("via") and xl):
-            if xl + len(marca) + 1 >= w - 14:
+            if xl + len(marca) + 1 >= w - 30:
                 break
             self.put(y, xl, marca, self.attr(self.via_cor(chave)) | curses.A_BOLD)
             xl += len(marca) + 1
@@ -2588,7 +2598,7 @@ class Ui:
             if self.dev_top:
                 self.put(y, 6, "^ %d more above" % self.dev_top, self.attr("dim"))
             y += 1
-        takes_por_camara = self.takes_por_camara(dv) if self.vista == "TAKE" else {}
+        takes_por_camara = self.takes_por_camara(dv) if any(v == "TAKE" for v, _x, _w in colunas) else {}
         for i in range(self.dev_top, self.dev_top + vis):
             r = self.rows[i]
             armado = r["id"] in self.targets
@@ -2629,22 +2639,24 @@ class Ui:
             # num bloco da cor da ligacao.
             self.put(y, 11, (" %-" + str(NOME_W) + "s") % r["label"], (self.hl(cor_lig) if cor_lig != "dim" else sel | va) if sel else la)
             self.put(y, COL_ESTADO, "%-12s" % state, sel | sa)
-            if self.vista == "STATE":
-                self.put(y, COL_V, "%-6s" % batt, sel | va)
-                self.put(y, COL_V + 7, "%-8s" % r["left"], sel | va)
-                if r.get("alias"):
-                    self.put(y, COL_V + 16, "%-10.10s " % r["alias"], sel | self.attr("cyan") | curses.A_BOLD)
-            elif self.vista == "IMAGE":
-                self.put(y, COL_V, "%-6s" % r["mode"], sel | va)
-                self.put(y, COL_V + 7, ("%-" + str(max(1, w - COL_V - 9)) + "." + str(max(1, w - COL_V - 9)) + "s") % (r.get("cfg") or "-"), sel | va)
-            elif self.vista == "NETWORK":
-                self.put(y, COL_V, ("%-" + str(max(1, w - COL_V - 2)) + "." + str(max(1, w - COL_V - 2)) + "s") % (
-                    (r.get("net") or "-") if r["conn"] else "offline"), sel | va)
-            else:
-                t = takes_por_camara.get(r["id"]) or {}
-                self.put(y, COL_V, "%-6.6s" % (t.get("take") or "-"), sel | va)
-                self.put(y, COL_V + 6, "%-12.12s" % (t.get("clip") or "-"), sel | va)
-                self.put(y, COL_V + 19, "%-8.8s" % ((t.get("timestamp") or "")[11:19] or "-"), sel | va)
+            for v, x, lw in colunas:
+                if v == "STATE":
+                    self.put(y, x, "%-6s" % batt, sel | va)
+                    self.put(y, x + 7, "%-8s" % r["left"], sel | va)
+                    if r.get("alias"):
+                        self.put(y, x + 16, "%-10.10s " % r["alias"], sel | self.attr("cyan") | curses.A_BOLD)
+                elif v == "IMAGE":
+                    tw = max(1, lw - 8)
+                    self.put(y, x, "%-6s" % r["mode"], sel | va)
+                    self.put(y, x + 7, ("%-" + str(tw) + "." + str(tw) + "s") % (r.get("cfg") or "-"), sel | va)
+                elif v == "NETWORK":
+                    tw = max(1, lw - 1)
+                    self.put(y, x, ("%-" + str(tw) + "." + str(tw) + "s") % ((r.get("net") or "-") if r["conn"] else "offline"), sel | va)
+                else:
+                    t = takes_por_camara.get(r["id"]) or {}
+                    self.put(y, x, "%-6.6s" % (t.get("take") or "-"), sel | va)
+                    self.put(y, x + 6, "%-12.12s" % (t.get("clip") or "-"), sel | va)
+                    self.put(y, x + 19, "%-8.8s" % ((t.get("timestamp") or "")[11:19] or "-"), sel | va)
             y += 1
         if marcas:
             abaixo = n_rows - self.dev_top - vis
@@ -2667,6 +2679,37 @@ class Ui:
                      self.attr("yellow") | curses.A_BOLD)
         self.draw_tc(refresh=False)
         scr.refresh()
+
+    def vistas_visiveis(self, w):
+        """[(vista, x, largura)] das vistas da lista de aparelhos que cabem no ecra de `w` colunas, da esquerda para a direita.
+        Cabendo todas, vao pela ordem de VISTAS e nao ha o que escolher. Senao comeca-se na vista escolhida (setas) e juntam-se
+        as seguintes enquanto couberem (a primeira fica sempre, mesmo num ecra estreito). Sobra de largura: as colunas de texto
+        livre (IMAGE, NETWORK) crescem ate ao desejado e depois ate ao maximo."""
+        disp = max(1, w - COL_V - 1)
+        ordem = list(VISTAS)
+        if sum(DASH_COLS[v][0] for v in VISTAS) > disp:
+            i = VISTAS.index(self.vista)
+            ordem = list(VISTAS[i:] + VISTAS[:i])
+        usadas, gasto = [], 0
+        for v in ordem:
+            minimo = DASH_COLS[v][0]
+            if usadas and gasto + minimo > disp:
+                break
+            usadas.append(v)
+            gasto += minimo
+        larg = {v: DASH_COLS[v][0] for v in usadas}
+        livre = disp - gasto
+        for alvo in (1, 2):                    # primeiro ate ao desejado, depois ate ao maximo
+            for v in usadas:
+                mais = min(livre, DASH_COLS[v][alvo] - larg[v])
+                if mais > 0:
+                    larg[v] += mais
+                    livre -= mais
+        out, x = [], COL_V
+        for v in usadas:
+            out.append((v, x, larg[v]))
+            x += larg[v]
+        return out
 
     def takes_por_camara(self, dv):
         """{id: ultima linha do shoot log com take ou clip} de cada camara. O shoot log guarda o nome da camara em

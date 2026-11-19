@@ -48,6 +48,7 @@ import frc8
 import f6_card
 
 import gravar
+import padroes                  # uma instalacao nova comeca sem aparelhos; uma que ja existia fica como estava
 
 import claquete                 # cena, reel e take do clip seguinte em todas as camaras
 
@@ -56,7 +57,9 @@ import tc_vigia                 # desvio do timecode de cada camara para o LTC d
 
 
 # === CONFIG ===
-CAMERA_ADDRESS = "CC:86:EC:2F:15:50"
+# O endereco Bluetooth da BMPCC (so para a ligacao directa pelo Bluetooth do Atom, o plano B do C3). Vem do devices.json
+# ("bmpcc.address"); de fabrica nao ha nenhum.
+CAMERA_ADDRESS = ""
 
 OUTGOING_UUID = "5dd3465f-1aee-4299-8493-d2eca2f8e1bb"
 
@@ -213,6 +216,9 @@ def adapter_mac(hci):
 def device_path(hci, mac):
     """BlueZ object path for a device on a specific controller."""
     return f"/org/bluez/{hci}/dev_" + mac.upper().replace(":", "_")
+
+# Antes de qualquer ficheiro de dados ser lido (as frotas e o devices.json leem-se ao importar este modulo).
+padroes.migrar(os.path.dirname(os.path.abspath(__file__)))
 
 # === STATE ===
 state = {
@@ -2079,8 +2085,8 @@ def connect_camera_dbus():
     global camera_char_path
     if c3_bm.ativo():
         return _connect_camera_c3()
-    if not BMPCC_ACTIVE:
-        return False                  # BMPCC retirada
+    if not BMPCC_ACTIVE or not CAMERA_ADDRESS:
+        return False                  # BMPCC retirada, ou sem endereco Bluetooth (so ha a ligacao pelo C3)
 
     # Connect over D-Bus on the device's path under CAMERA_ADAPTER, rather than
     # shelling out to `bluetoothctl connect`, which always uses whichever
@@ -2421,6 +2427,8 @@ def _camera_dbus_disconnect():
     if n:
         log_event(f"BMPCC: closed {n} notification session(s)")
 
+    if not CAMERA_ADDRESS:
+        return                                  # sem endereco Bluetooth nao ha nada a desligar no BlueZ
     path = device_path(CAMERA_ADAPTER, CAMERA_ADDRESS)
     bus = None
     try:

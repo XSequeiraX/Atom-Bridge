@@ -14,8 +14,8 @@
 #                   (num terminal mostram-se e pede-se "yes"). Aceitam-se uma vez: depois nada volta a perguntar.
 #   AP_PSK          password do AP das cameras; se faltar e o AP nao existir,
 #                   e pedida (tem de ser a que as cameras ja tem guardada)
-#   UP_NAME/AP_NAME nomes das interfaces Wi-Fi (uplink / dongle do AP); numa instalacao nova sao pedidos (Enter: ps-uplink /
-#                   ps-control); numa actualizacao ficam os do ap.conf
+#   UP_NAME/AP_NAME nomes fixos das interfaces Wi-Fi (uplink / dongle do AP), opcionais: sem eles ficam os nomes que o sistema da;
+#                   numa instalacao nova pergunta-se por cada interface que exista; numa actualizacao ficam os do ap.conf
 #
 # De fora, de proposito: a regra udev que desliga a Ethernet (cortava o SSH) e
 # os scripts de Wi-Fi do Pi (ps-wifi-fallback, ps-portal, ps-ap-channel).
@@ -52,7 +52,7 @@ pin_da_pagina "$OPT" "$APP" "$PRIMEIRA_INSTALACAO" \
     || die "set the web PIN: run the installer in a terminal, or WEB_PIN=<4 to 12 digits> sudo -E bash install_atom.sh"
 # Os nomes das interfaces Wi-Fi, tambem antes do trabalho demorado.
 nomes_interfaces "$OPT" "$PRIMEIRA_INSTALACAO" || die "fix the interface names (UP_NAME=... AP_NAME=...)"
-echo "Wi-Fi interface names: uplink $UP_NAME, cameras AP $AP_NAME"
+echo "Wi-Fi interface names: uplink ${UP_NAME:-(as the system names it)}, cameras AP ${AP_NAME:-(as the system names it)}"
 # As portas Ethernet: numa instalacao nova lista-as e pergunta um nome para cada uma (Enter fica com o actual).
 nomes_ethernet "$PRIMEIRA_INSTALACAO"
 
@@ -169,19 +169,15 @@ fi
 python3 "$OPT/gw_usb.py" --fetch-mp 2>&1 | tail -1 || true
 
 # ----------------------------------------------------------------------------
-step "3/7 Network interfaces (fixed names: $UP_NAME and $AP_NAME, and the Ethernet ports)"
+step "3/7 Network interfaces (Wi-Fi and Ethernet names)"
 # O AP das cameras e o dongle AR9271 (driver ath9k_htc); o uplink e o outro
 # radio Wi-Fi da maquina. Os nomes que o sistema da sozinho (wlp7s0,
 # wlx90f65217bfd1) vem do barramento e do MAC; ficam nomes fixos com ficheiros
 # .link do systemd: o uplink pelo caminho PCI do radio interno (nao muda), o AP
 # pelo driver do dongle (vale em qualquer porta USB). Nao se usa wlanN: e o
 # nome que o kernel da sozinho e pode chocar no arranque.
-AP_IF="$(for d in /sys/class/net/*; do
-    [ "$(basename "$(readlink -f "$d/device/driver" 2>/dev/null)")" = ath9k_htc ] && basename "$d"
-done | head -1 || true)"
-UP_IF="$(for d in /sys/class/net/*; do
-    n="$(basename "$d")"; [ -d "$d/wireless" ] && [ "$n" != "$AP_IF" ] && echo "$n"
-done | head -1 || true)"
+AP_IF="$(wifi_ap_iface)"
+UP_IF="$(wifi_up_iface)"
 echo "now: cameras AP ${AP_IF:-(dongle not found)}, uplink ${UP_IF:-(none)}"
 
 NEED_REBOOT=0
@@ -195,14 +191,20 @@ write_link() {   # ficheiro, linha do [Match], nome
 }
 mkdir -p /etc/systemd/network
 if [ -n "$AP_IF" ]; then
-    write_link /etc/systemd/network/10-bridge-camap.link "Driver=ath9k_htc" "$AP_NAME"
-    [ "$AP_IF" = "$AP_NAME" ] || NEED_REBOOT=1
+    if [ -n "$AP_NAME" ]; then
+        write_link /etc/systemd/network/10-bridge-camap.link "Driver=ath9k_htc" "$AP_NAME"
+        [ "$AP_IF" = "$AP_NAME" ] || NEED_REBOOT=1
+    else
+        AP_NAME="$AP_IF"                # sem nome escolhido: fica o que o sistema da (e vai para o ap.conf)
+    fi
 else
     AP_NAME=""
 fi
 if [ -n "$UP_IF" ]; then
     UP_PATH="$(udevadm info -q property -p "/sys/class/net/$UP_IF" 2>/dev/null | sed -n 's/^ID_PATH=//p' | head -1 || true)"
-    if [ -n "$UP_PATH" ]; then
+    if [ -z "$UP_NAME" ]; then
+        UP_NAME="$UP_IF"                # sem nome escolhido: fica o que o sistema da (e vai para o ap.conf)
+    elif [ -n "$UP_PATH" ]; then
         write_link /etc/systemd/network/10-bridge-uplink.link "Path=$UP_PATH" "$UP_NAME"
         [ "$UP_IF" = "$UP_NAME" ] || NEED_REBOOT=1
     else
@@ -516,7 +518,7 @@ printf "%-18s %s\n" camera-bridge "$(systemctl is-active camera-bridge)" \
                     bridge-boot-menu "$(systemctl is-enabled bridge-boot-menu) (the console starts from the menu)"
 if [ "$NEED_REBOOT" = 1 ]; then
     echo
-    echo "*** RESTART THE ATOM for the new interface names ($UP_NAME, $AP_NAME and any renamed Ethernet port)"
+    echo "*** RESTART THE ATOM for the new interface names (the renamed Wi-Fi interfaces and Ethernet ports)"
     echo "*** to take effect:  sudo reboot"
     echo "*** Until then the bridge network panel and the AP may not answer."
 fi

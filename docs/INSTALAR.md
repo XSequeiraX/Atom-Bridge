@@ -11,9 +11,9 @@ Demora cerca de 20 a 30 minutos, quase todos a descarregar pacotes. O instalador
 | | |
 |---|---|
 | **O Atom** | O portátil onde o bridge corre. O instalador foi feito e testado num **Toshiba NB500 (Atom) com Debian 13**. Outro PC com Debian 13 deve servir, mas não foi testado. |
-| **Dongle Wi-Fi do AP** | Um dongle USB com chip **Atheros AR9271** (driver `ath9k_htc`). Serve a rede Wi-Fi das câmaras. **Liga-o antes de instalar** (ver o passo 4). |
+| **Quem serve a rede das câmaras** | **Uma de duas:** um dongle USB com chip **Atheros AR9271** (driver `ath9k_htc`), que o Atom usa como ponto de acesso; **ou** um router/AP ligado por **cabo Ethernet** ao Atom (ver [«Com um router por Ethernet»](#com-um-router-por-ethernet-em-vez-do-dongle)). Com o dongle, liga-o **antes de instalar** (passo 4). |
 | **Internet durante a instalação** | Cabo Ethernet, ou o Wi-Fi interno do portátil. Os pacotes descarregam-se do Debian e do GitHub. Depois de instalado, o Atom trabalha sem internet. |
-| **O nome e a palavra-passe da rede das câmaras** | Se as câmaras já têm uma rede guardada, usa **exatamente a mesma**. Num rig novo, escolhe agora (nome até 32 caracteres, palavra-passe de 8 ou mais) e põe depois essa rede nas câmaras. |
+| **O nome da rede das câmaras** (e a palavra-passe, só com dongle) | Se as câmaras já têm uma rede guardada, usa **exatamente o mesmo nome**. Num rig novo, escolhe agora (nome até 32 caracteres, palavra-passe de 8 ou mais) e põe depois essa rede nas câmaras. Com um router por Ethernet é o nome do Wi-Fi que o router emite. |
 | **Um PIN para a página web** | 4 a 12 dígitos. É o que os telemóveis e iPads na rede das câmaras usam para abrir a página. |
 
 ## 1. Instalar o Debian 13
@@ -51,9 +51,11 @@ git clone https://github.com/XSequeiraX/Atom-Bridge
 cd Atom-Bridge
 ```
 
-## 4. Ligar o dongle do AP
+## 4. Ligar o dongle do AP (só se usas o dongle)
 
 Liga o dongle AR9271 numa porta USB do Atom **antes de instalar**. Sem ele o instalador acaba na mesma, mas avisa e **não cria a rede das câmaras** (resolve-se ligando o dongle e voltando a correr o instalador, passo 5).
+
+**Se vais usar um router por Ethernet, salta este passo.** Não precisas de dongle.
 
 ## 5. Correr o instalador
 
@@ -67,10 +69,10 @@ O instalador faz perguntas pela ordem seguinte. Lê-as com atenção:
 |---|---|
 | **Avisos de licença** (SDK da Sony, da Canon e outros) | Lê e escreve `yes`. É obrigatório e pergunta-se **uma só vez**: depois nada volta a perguntar. |
 | **PIN da página web** | 4 a 12 dígitos. Guarda-o: é o que os telemóveis e iPads usam. |
-| **Nomes das interfaces Wi-Fi** | Carrega em **Enter** nas duas: `ps-uplink` (o Wi-Fi interno, que liga ao local) e `ps-control` (o dongle, que serve as câmaras). |
+| **Nome fixo de cada interface Wi-Fi** | **Enter** deixa o nome que o sistema lhe dá (recomendado). Só pergunta pelas interfaces que existem: sem dongle não pergunta pelo dongle. |
 | **Nome de cada porta Ethernet** | **Enter** deixa como está. Dá nomes só se tiveres mais de uma e quiseres distingui-las. |
-| **Nome (SSID) do AP das câmaras** | O nome da rede das câmaras (até 32 caracteres). |
-| **Palavra-passe do AP** | A palavra-passe dessa rede (8 ou mais caracteres). Não aparece enquanto escreves. |
+| **Nome (SSID) do AP das câmaras** | O nome da rede das câmaras (até 32 caracteres). Pergunta-se sempre: com um router por Ethernet, é o nome do Wi-Fi do router. |
+| **Palavra-passe do AP** | **Só se o dongle estiver ligado**, para criar a rede dele (8 ou mais caracteres; não aparece enquanto escreves). Sem dongle não pergunta. |
 
 Depois instala os pacotes e o código (sete passos, numerados no ecrã) e no fim mostra o resumo. Se o bridge novo não arrancar, o próprio instalador **repõe o código anterior**.
 
@@ -80,7 +82,7 @@ Todas as respostas podem vir do ambiente:
 
 ```bash
 sudo ACCEPT_LICENSES=yes WEB_PIN=123456 AP_SSID='NomeDaRede' AP_PSK='palavra-passe' \
-     UP_NAME=ps-uplink AP_NAME=ps-control bash atom-install/install_atom.sh
+     bash atom-install/install_atom.sh
 ```
 
 ## 6. Reiniciar
@@ -107,7 +109,19 @@ Para a configuração inicial: carrega em **Esc** e escolhe **WIZARD**. O assist
 
 No iPhone e no iPad, *Partilhar > Adicionar ao ecrã principal* deixa a página como uma aplicação.
 
+## Com um router por Ethernet, em vez do dongle
+
+O Atom pode servir as câmaras por um router (ou AirPort Express, ou outro AP) ligado por cabo, sem dongle. Faz-se **depois de instalar**, na consola:
+
+1. **No router:** põe-no em **modo bridge / ponto de acesso, com o DHCP desligado**. Quem dá os endereços é o Atom (`192.168.4.1`, rede `192.168.4.0/24`), e dois DHCP na mesma rede estragam tudo. Emite o Wi-Fi com **o mesmo nome e a mesma palavra-passe** que as câmaras têm guardados. Liga o cabo de uma porta **LAN** do router (não a WAN) à porta Ethernet do Atom.
+2. **No instalador:** responde ao nome da rede como acima; sem dongle, não pede a palavra-passe e avisa «no AR9271 dongle plugged in», o que é normal.
+3. **Na consola:** *Esc > DEVICES > WIRELESS >* **Settings** da rede das câmaras *> Cameras' AP: dongle (switch to external, Ethernet)*. Passa para o modo externo (`EXT AP` no dashboard). Só aparece se o Atom tiver uma porta Ethernet.
+
+A internet do Atom continua a vir do Wi-Fi interno ou de outro cabo; a rede das câmaras não partilha internet. Podes voltar ao dongle no mesmo menu.
+
 ## 8. Ligar as câmaras
+
+Uma instalação nova **não traz nenhum aparelho nem gateway configurado**: tudo se acrescenta tu, em *Esc > DEVICES* na consola (ou nos botões **+ ADD** da página). Os gateways e as câmaras que se anunciam na rede aparecem sugeridos.
 
 - **Canon:** o CCAPI vem desligado de fábrica. Ativa-o **uma vez em cada câmara** com a *CCAPI Activation Tool* da Canon, por USB, num Windows ou Mac. Depois a câmara liga-se ao Atom por Wi-Fi.
 - **Sony, telemóveis, GoPro, BMPCC, F6:** cada uma tem o seu passo no assistente (e a lista de aparelhos suportados está no [README](../README.md#aparelhos-suportados)).
@@ -143,4 +157,3 @@ O kernel **não** é atualizado automaticamente (o instalador fixa-o de propósi
 - O que cada ficheiro faz: [`atom-install/LEIA-ME.txt`](../atom-install/LEIA-ME.txt) e [`atom/LEIA-ME.txt`](../atom/LEIA-ME.txt).
 - A API do bridge: [`docs/API.md`](API.md).
 - Firmware dos gateways, GoPro, F6 e modo de treino: [README](../README.md).
-- O Atom pode servir a rede das câmaras por um AP externo ligado por Ethernet (por exemplo um AirPort Express em modo bridge) em vez do dongle: consola, *Esc > DEVICES > WIRELESS >* **Settings** da rede das câmaras *> Cameras' AP* (a entrada só aparece se o Atom tiver uma porta Ethernet). O AP externo tem de emitir o mesmo nome e palavra-passe.

@@ -3,7 +3,7 @@
 # das Canon e o gateway 192.168.4.1, mas nada que venha do AP sai por outra interface (sem NAT para o uplink).
 # O trafego do proprio Atom (bridge, NTP, Tailscale, OTA dos gateways) nao passa pela cadeia "forward": nao e afectado.
 # Uso: bridge-ap-nonat.sh start|stop
-AP_IF=ps-control
+AP_IF=""    # o ap.conf (AP_IF, escrito pelo instalador) ou, no modo externo, a porta Ethernet
 # Le-se com sed e nao com ". ap.conf": o AP_CON e o nome da rede, sem aspas (um "Rig (5G)" seria um erro de sintaxe, e um
 # "$(...)" correria como root).
 AP_CONF_IF="$(sed -n 's/^AP_IF=//p' /opt/camera-bridge/ap.conf 2>/dev/null | head -n1)"
@@ -16,6 +16,7 @@ if grep -q '"modo": *"external"' "$AP_MODO_F" 2>/dev/null; then
 fi
 case "$1" in
     start)
+        [ -n "$AP_IF" ] || { echo "bridge-ap-nonat: no cameras AP interface (no dongle, no external AP): nothing to do"; exit 0; }
         nft delete table inet bridge_ap_nonat 2>/dev/null || true
         # priority -10: corre antes das regras que o NetworkManager poe para o "shared"; um drop ganha a qualquer accept.
         nft -f - <<NFT

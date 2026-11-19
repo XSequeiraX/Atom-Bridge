@@ -193,8 +193,9 @@ Qualquer gateway (o C3 principal, os C3 das BMPCC extra, os S3, também o primei
   com o mesmo id (`bm2`) e nome, por isso os nomes de referência e o shoot log continuam a bater certo. Os alvos de REC
   escolhem-se de novo.
 - Um C3 não se junta como S3, nem um S3 como C3 (o Atom pergunta ao aparelho o que ele é), e o mesmo C3 não serve duas câmaras.
-- Sem nenhum S3 a lista fica vazia sem alarmes, e o menu só oferece juntar um. Uma instalação nova começa com o
-  primeiro S3 por preencher.
+- Sem nenhum S3 a lista fica vazia sem alarmes, e o menu só oferece juntar um. Uma instalação nova **não traz nenhum
+  aparelho nem gateway**: nem Canon, nem telemóveis, nem S3, nem o endereço Bluetooth de uma BMPCC. Acrescentam-se em
+  DEVICES (consola ou página), que sugere os que se anunciam na rede. (Um Atom que já corria guarda o que tinha.)
 
 ## Comando do F6 pelo iPhone / iPad / Watch, sem o Atom
 

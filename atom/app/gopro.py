@@ -11,7 +11,6 @@ take_no, on_mark(), status(). O endereco do gateway fica em gopros.json; se muda
 o aviso UDP do gateway (porta 5170) corrige-o.
 """
 import json
-import os
 import re
 import socket
 import threading
@@ -644,8 +643,7 @@ class GoproFleet:
                                               str(e.get("name") or ""))
         except (OSError, ValueError):
             pass
-        if not self.gws and not os.path.exists(cfg_path):        # instalacao nova: o primeiro gateway, por preencher
-            self.gws[1] = Gateway(self, 1)
+        # Instalacao nova: nenhum gateway (acrescentam-se em DEVICES: os S3 que se anunciam sao sugeridos).
 
     # ---- o primeiro gateway (o de menor numero), como antes; sem nenhum, valores neutros ----
     def _primeiro(self):

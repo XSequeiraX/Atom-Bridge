@@ -1052,15 +1052,10 @@ class CanonCamera:
 
 
 # === CONFIG ===
-# Os corpos de origem. Os enderecos, e as Canon que se juntam ou tiram, mudam-se em DEVICES (consola ou pagina) e
-# ficam em devices.json; o bridge aplica-os por cima destes ao arrancar (_dev_aplicar).
-CANON_R10_IP = "192.168.4.100"
-CANON_R6M2_IP = "192.168.4.75"
-
-CAMERAS = {
-    "r10": CanonCamera("R10", CANON_R10_IP),
-    "r6m2": CanonCamera("R6", CANON_R6M2_IP, port=443, use_https=True),
-}
+# Nenhuma Canon de fabrica: as que se juntam ou tiram fazem-se em DEVICES (consola ou pagina) e ficam em devices.json; o bridge
+# acrescenta-as a este dicionario ao arrancar (_dev_aplicar). (Um Atom que ja corria com a R10 e a R6 de antes guarda-as la:
+# padroes.py.)
+CAMERAS = {}
 
 
 def watchdog(interval=5):

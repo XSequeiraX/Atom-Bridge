@@ -699,9 +699,7 @@ class Fleet:
         except (OSError, ValueError):
             pass
         if not isinstance(lista, dict) or not isinstance(lista.get("iphones"), dict):
-            # primeira vez: o iPhone testado a 2026-10-08
-            lista = {"iphones": {"iphone1": {"name": "Mobile A", "host": "192.168.4.11", "port": 4444,
-                                             "enabled": True, "scene": ""}}}
+            lista = {"iphones": {}}               # primeira vez: nenhum telemovel (acrescentam-se em DEVICES)
         self._cfg = lista
         self.cams = {}
         for cid, c in sorted(lista["iphones"].items()):

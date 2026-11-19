@@ -27,19 +27,22 @@ O que faz
   O quiosque (Xorg + surf no ecra do Atom) saiu a 2026-10-15: num Atom que o tinha, o instalador tira o servico
   e os pacotes do X e do surf, e o arranque passa a modo texto (multi-user.target).
 
-Nomes dos adaptadores Wi-Fi (fixos, por ficheiros .link em /etc/systemd/network)
-  ps-uplink    Wi-Fi interno, liga a rede do local (reconhecido pelo caminho PCI)
-  ps-control   dongle AR9271 do AP das cameras, perfil do AP (pelo driver)
-  Numa instalacao nova o instalador pergunta os dois nomes (Enter fica com estes); numa
-  actualizacao ficam os que estao no ap.conf. Sem perguntas: sudo UP_NAME=... AP_NAME=...
-  bash install_atom.sh. Depois de os mudar e preciso reiniciar o Atom (o script avisa).
+Nomes dos adaptadores Wi-Fi (opcionais; fixos, por ficheiros .link em /etc/systemd/network)
+  O instalador nao assume nenhum nome. Cada adaptador fica com o nome que o sistema lhe da (wlp7s0,
+  wlx...), que vai para o ap.conf, a nao ser que escolhas um:
+    uplink   o Wi-Fi interno, que liga a rede do local (o .link reconhece-o pelo caminho PCI)
+    AP       o dongle AR9271 do AP das cameras (o .link reconhece-o pelo driver)
+  Numa instalacao nova pergunta por cada adaptador que exista (Enter fica com o nome actual; sem
+  dongle nao pergunta pelo dongle); numa actualizacao ficam os que estao no ap.conf. Sem
+  perguntas: sudo UP_NAME=... AP_NAME=... bash install_atom.sh. Depois de os mudar e preciso
+  reiniciar o Atom (o script avisa).
   Portas Ethernet: numa instalacao nova o instalador lista-as e pergunta um nome para
   cada uma (Enter fica com o actual). Depois de instalado: consola, Devices > WIRELESS >
   Ethernet ports, ou o botao RENAME ETHERNET PORT da pagina (fica logo e depois de
   reiniciar; ficheiros /etc/systemd/network/20-bridge-eth-*.link).
 
 AP das cameras sem internet
-  O AP (ps-control) nao partilha a internet do uplink: o NetworkManager continua em "shared" (DHCP, reservas das
+  O AP das cameras (o dongle) nao partilha a internet do uplink: o NetworkManager continua em "shared" (DHCP, reservas das
   Canon, gateway 192.168.4.1) e o servico bridge-ap-nonat recusa o que vem do AP (reject: as apps desistem logo) para outra interface.
   O Atom, os gateways e o Tailscale nao sao afectados. Voltar a partilhar: sudo systemctl disable --now bridge-ap-nonat
 

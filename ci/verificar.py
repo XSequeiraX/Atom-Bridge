@@ -26,9 +26,13 @@ IGNORAR = ("imported but unused", "f-string is missing placeholders", "redefinit
 
 # (nome, tamanho, cenario, teclas, textos que tem de haver no ecra)
 CONSOLA = [
-    ("dashboard", "100x40", "normal", [], ["REC  VIA  DEVICE", "< STATE >", "GATEWAYS"]),
+    ("dashboard", "100x40", "normal", [], ["REC  VIA  DEVICE", "BATT", "SETTINGS", "< more >", "GATEWAYS"]),
+    # As colunas do dashboard vem da largura do ecra: todas de uma vez num ecra largo (sem carregar em teclas), as que couberem num
+    # mais estreito (e as setas mudam a primeira), so uma num de 80 colunas.
+    ("dashboard largo: todas as colunas", "170x36", "normal", [], ["BATT", "SETTINGS", "LINK", "TAKE  CLIP"], ["< more >"]),
+    ("dashboard 120: tres colunas", "120x36", "normal", [], ["BATT", "SETTINGS", "LINK", "< more >"], ["TAKE  CLIP"]),
     ("dashboard 80x24", "80x24", "normal", [], ["DEVICE", "STATE"]),
-    ("vista IMAGE", "100x40", "normal", ["\\eOC"], ["< IMAGE >", "SETTINGS"]),
+    ("vista IMAGE", "100x40", "normal", ["\\eOC"], ["MODE", "SETTINGS", "LINK", "< more >"], ["BATT   LEFT"]),
     ("falhas", "100x40", "falhas", [], ["offline", "FAULT"]),
     ("a gravar", "100x40", "rec", [], ["REC  00:03:1", "take 7", "cameras"]),
     ("rodape", "100x40", "normal", [], ["SPACE target", "ESC menu", "F1 help"]),
@@ -334,18 +338,43 @@ def ap_externo():
 
 
 def nomes_interfaces():
-    """O instalador pede os nomes das interfaces Wi-Fi numa instalacao nova (Enter fica com ps-uplink / ps-control), recusa os
-    invalidos e repetidos, e numa actualizacao fica com os do ap.conf sem perguntar."""
+    """O instalador nao assume nenhum nome para as interfaces Wi-Fi: numa instalacao nova num terminal pergunta so por as que
+    existem (Enter fica com o nome do sistema), recusa os invalidos e repetidos, e numa actualizacao fica com os do ap.conf sem
+    perguntar. Sem dongle nao pergunta pelo dongle; sem Wi-Fi nao pergunta nada. Nenhum nome fixo no codigo do instalador."""
     import pty
     erros = []
-    lib = os.path.join(RAIZ, "atom-install", "lib_app.sh")
+    raiz_inst = os.path.join(RAIZ, "atom-install")
+    lib = os.path.join(raiz_inst, "lib_app.sh")
+    # Nenhum nome de interface escrito no instalador (eram ps-uplink / ps-control, restos do projecto antigo).
+    for f in ("lib_app.sh", "install_atom.sh", os.path.join("system", "bridge-ap-nonat.sh")):
+        for n, linha in enumerate(open(os.path.join(raiz_inst, f)), 1):
+            if "ps-control" in linha or "ps-uplink" in linha:
+                erros.append("atom-install/%s:%d ainda tem um nome de interface fixo: %s" % (f, n, linha.strip()[:90]))
     tmp = tempfile.mkdtemp(prefix="ifnomes-")
 
-    def corre(nova, env=None, entrada=None):
+    def sysfs(nome, interno=True, dongle=True):
+        """Um /sys/class/net de mentira: o Wi-Fi interno (wlp7s0) e o dongle (wlxdead..., driver ath9k_htc)."""
+        base = os.path.join(tmp, nome)
+        os.makedirs(base)
+        if interno:
+            os.makedirs(os.path.join(base, "wlp7s0", "wireless"))
+        if dongle:
+            d = os.path.join(base, "wlxdead01")
+            os.makedirs(os.path.join(d, "device"))
+            os.makedirs(os.path.join(d, "wireless"))
+            drv = os.path.join(tmp, "drivers", "ath9k_htc")
+            os.makedirs(drv, exist_ok=True)
+            os.symlink(drv, os.path.join(d, "device", "driver"))
+        return base
+
+    def corre(nova, env=None, entrada=None, rede=None):
         cmd = ['bash', '-c', '. "$0"; nomes_interfaces "$1" "$2"; rc=$?; echo "RES=$rc|$UP_NAME|$AP_NAME"', lib, tmp, str(nova)]
         e = dict(os.environ, **(env or {}))
-        e.pop("UP_NAME", None) if not (env and "UP_NAME" in env) else None
-        e.pop("AP_NAME", None) if not (env and "AP_NAME" in env) else None
+        for k in ("UP_NAME", "AP_NAME", "SYS_NET_DIR"):
+            if not (env and k in env):
+                e.pop(k, None)
+        if rede:
+            e["SYS_NET_DIR"] = rede
         if entrada is None:
             r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, env=e, timeout=20)
             out = r.stdout + r.stderr
@@ -364,16 +393,31 @@ def nomes_interfaces():
         return (m.groups() if m else ("?", "?", "?")), out
 
     conf = os.path.join(tmp, "ap.conf")
-    # instalacao nova num terminal: Enter no primeiro, um invalido e um repetido no segundo, depois um bom
-    (rc, up, ap), out = corre(1, entrada="\nwlan0\nps-uplink\ncamap\n")
-    if (rc, up, ap) != ("0", "ps-uplink", "camap"):
-        erros.append("instalacao nova com perguntas: %r %r" % ((rc, up, ap), out[-400:]))
+    ambos, so_interno, nenhum = sysfs("ambos"), sysfs("interno", dongle=False), sysfs("nenhum", interno=False, dongle=False)
+    # instalacao nova num terminal, com as duas interfaces: Enter nas duas deixa os nomes do sistema (vazios aqui)
+    (rc, up, ap), out = corre(1, entrada="\n\n", rede=ambos)
+    if (rc, up, ap) != ("0", "", "") or "wlp7s0" not in out or "wlxdead01" not in out:
+        erros.append("Enter nas duas devia deixar os nomes do sistema e perguntar por wlp7s0 e wlxdead01: %r %r" % ((rc, up, ap), out[-300:]))
+    if "ps-" in out:
+        erros.append("a pergunta nao devia sugerir nomes fixos: %r" % out[-300:])
+    # um invalido e um repetido, depois os bons
+    (rc, up, ap), out = corre(1, entrada="wlan0\nnet-in\nnet-in\ncams\n", rede=ambos)
+    if (rc, up, ap) != ("0", "net-in", "cams"):
+        erros.append("nomes escritos no terminal: %r %r" % ((rc, up, ap), out[-400:]))
     elif "not wlanN" not in out or "different from the uplink" not in out:
         erros.append("devia explicar porque recusa wlan0 e o repetido: %r" % out[-400:])
-    # sem terminal: os de sempre, sem perguntar
-    (rc, up, ap), out = corre(1)
-    if (rc, up, ap) != ("0", "ps-uplink", "ps-control") or "Name for" in out:
-        erros.append("sem terminal devia ficar com ps-uplink/ps-control sem perguntar: %r" % ((rc, up, ap),))
+    # so o Wi-Fi interno: nao pergunta pelo dongle
+    (rc, up, ap), out = corre(1, entrada="\n", rede=so_interno)
+    if (rc, up, ap) != ("0", "", "") or "dongle" in out:
+        erros.append("sem dongle nao devia perguntar pelo dongle: %r %r" % ((rc, up, ap), out[-300:]))
+    # sem Wi-Fi nenhum: nao pergunta nada
+    (rc, up, ap), out = corre(1, entrada="\n\n", rede=nenhum)
+    if (rc, up, ap) != ("0", "", "") or "Fixed name" in out:
+        erros.append("sem Wi-Fi nao devia perguntar nada: %r %r" % ((rc, up, ap), out[-300:]))
+    # sem terminal: os nomes do sistema, sem perguntar
+    (rc, up, ap), out = corre(1, rede=ambos)
+    if (rc, up, ap) != ("0", "", "") or "Fixed name" in out:
+        erros.append("sem terminal devia ficar com os nomes do sistema sem perguntar: %r" % ((rc, up, ap),))
     # do ambiente
     if corre(1, env={"UP_NAME": "net-in", "AP_NAME": "cams"})[0] != ("0", "net-in", "cams"):
         erros.append("UP_NAME/AP_NAME do ambiente deviam valer")
@@ -382,9 +426,82 @@ def nomes_interfaces():
             erros.append("devia recusar %r" % mau)
     # actualizacao: os do ap.conf, sem perguntar mesmo num terminal
     open(conf, "w").write("AP_CON=Rig\nAP_IF=meu-ap\nUP_IF=minha-net\n")
-    (rc, up, ap), out = corre(0, entrada="\n\n")
-    if (rc, up, ap) != ("0", "minha-net", "meu-ap") or "Name for" in out:
+    (rc, up, ap), out = corre(0, entrada="\n\n", rede=ambos)
+    if (rc, up, ap) != ("0", "minha-net", "meu-ap") or "Fixed name" in out:
         erros.append("actualizacao devia ficar com os do ap.conf sem perguntar: %r %r" % ((rc, up, ap), out[-300:]))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return erros
+
+
+def instalacao_nova():
+    """Uma instalacao nova comeca sem aparelhos (nenhuma Canon, telemovel, S3 nem endereco da BMPCC de fabrica no codigo) e um Atom
+    que ja corria fica com o que tinha (padroes.py escreve-o nos ficheiros do operador, uma so vez)."""
+    import json
+    erros = []
+    app = os.path.join(RAIZ, "atom", "app")
+    # No codigo nao ha aparelhos de fabrica.
+    def ler(f):
+        return open(os.path.join(app, f), encoding="utf-8").read()
+    if "CAMERAS = {}" not in ler("canon_ccapi.py") or "CANON_R10_IP" in ler("canon_ccapi.py"):
+        erros.append("canon_ccapi.CAMERAS devia comecar vazio, sem Canon de fabrica")
+    if '"Mobile A"' in ler("bmcam.py") or "192.168.4.11" in ler("bmcam.py"):
+        erros.append("bmcam.py nao devia trazer o Mobile A de fabrica")
+    if 'CAMERA_ADDRESS = ""' not in ler("nucleo.py"):
+        erros.append('nucleo.CAMERA_ADDRESS devia ser "" (sem endereco Bluetooth de fabrica)')
+    if "self.gws[1] = Gateway(self, 1)\n" in ler("gopro.py").replace("self.gws[1] = Gateway(self, 1, ", ""):
+        erros.append("gopro.py nao devia criar o primeiro S3 vazio numa instalacao nova")
+    for f in sorted(os.listdir(app)):
+        if f.endswith(".py") and f != "padroes.py" and "CC:86:EC:2F:15:50" in ler(f):
+            erros.append("%s tem o endereco Bluetooth de uma BMPCC concreta (so o padroes.py, para os Atom que ja existiam)" % f)
+    # A migracao.
+    sys.path.insert(0, app)
+    import padroes
+    tmp = tempfile.mkdtemp(prefix="padroes-")
+
+    def pasta(nome, **ficheiros):
+        d = os.path.join(tmp, nome)
+        os.makedirs(d)
+        for f, c in ficheiros.items():
+            with open(os.path.join(d, f.replace("_", ".", 1) if f.endswith("_json") else f), "w") as fh:
+                fh.write(c if isinstance(c, str) else json.dumps(c))
+        return d
+
+    def lista(d):
+        return sorted(os.listdir(d))
+
+    def lido(d, f):
+        return json.load(open(os.path.join(d, f)))
+    # nova: nao escreve nada alem da marca; uma segunda vez ja nao faz nada
+    d = pasta("nova")
+    if padroes.migrar(d, log=lambda m: None) != "novo" or lista(d) != ["padroes.json"]:
+        erros.append("instalacao nova: so devia ficar a marca padroes.json: %r" % lista(d))
+    if padroes.migrar(d, log=lambda m: None) != "ja":
+        erros.append("a migracao devia correr uma so vez")
+    # existente (so o shoot log): leva as Canon, o endereco da BMPCC e o telemovel de antes
+    d = pasta("existente", **{"shoot_log.csv": "id,timestamp\n"})
+    if padroes.migrar(d, log=lambda m: None) != "existente":
+        erros.append("um Atom com shoot_log.csv devia ser existente")
+    dv, mb = lido(d, "devices.json"), lido(d, "iphones.json")
+    if sorted(dv.get("canons", {})) != ["r10", "r6m2"] or dv["canons"]["r6m2"] != {"name": "R6", "ip": "192.168.4.75", "port": 443, "https": True} \
+            or dv.get("bmpcc", {}).get("address") != padroes.LEGADO_BMPCC or "iphone1" not in mb.get("iphones", {}):
+        erros.append("existente: devia levar as Canon, a BMPCC e o telemovel de antes: %r %r" % (dv, mb))
+    # existente com uma Canon retirada (continua retirada, nas guardadas), uma esquecida (nao volta) e um iphones.json (nao se mexe)
+    d = pasta("decididas", **{"devices_json": {"removed": ["r10", "r6m2"], "forgotten": ["r6m2"], "bmpcc": {"active": False}},
+                              "iphones_json": {"iphones": {}}})
+    padroes.migrar(d, log=lambda m: None)
+    dv = lido(d, "devices.json")
+    if "r10" in dv.get("canons", {}) or "r6m2" in dv.get("canons", {}) or sorted(dv.get("saved", {})) != ["r10"] \
+            or dv.get("removed") or dv.get("forgotten") or dv["bmpcc"].get("active") is not False:
+        erros.append("existente com decisoes do operador: %r" % dv)
+    if lido(d, "iphones.json") != {"iphones": {}}:
+        erros.append("o iphones.json do operador nao se mexe")
+    # existente com a sua propria Canon e BMPCC: nao se duplica nem se troca
+    d = pasta("propria", **{"devices_json": {"canons": {"r10": {"name": "Minha", "ip": "10.0.0.5", "port": 8080, "https": False}},
+                                             "bmpcc": {"address": "AA:BB:CC:DD:EE:FF", "active": True}}})
+    padroes.migrar(d, log=lambda m: None)
+    dv = lido(d, "devices.json")
+    if dv["canons"]["r10"]["ip"] != "10.0.0.5" or dv["bmpcc"]["address"] != "AA:BB:CC:DD:EE:FF":
+        erros.append("o que o operador ja tinha nao se troca: %r" % dv)
     shutil.rmtree(tmp, ignore_errors=True)
     return erros
 
@@ -931,6 +1048,7 @@ if __name__ == "__main__":
                     ("Modo do AP das cameras: dongle ou Ethernet externa", ap_externo),
                     ("Instalador: nomes das interfaces Wi-Fi", nomes_interfaces),
                     ("Portas Ethernet: listar e renomear", portas_ethernet),
+                    ("Instalacao nova sem aparelhos", instalacao_nova),
                     ("Avisos de licenca: so no instalador", avisos_instalador),
                     ("AP: cameras ligadas (reserva ou IP)", ap_cameras_ligadas),
                     ("Takes por camara (atom-takes/1)", takes_exportadas)):
